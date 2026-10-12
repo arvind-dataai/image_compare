@@ -87,7 +87,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
    <div>
     <h2>4. Prompt</h2>
     <textarea id="prompt" placeholder="e.g. on a wooden table with morning sunlight"></textarea>
-    <div class="count"><button type="button" class="ghost" id="recent" style="float:left;padding:2px 10px;font-size:13px">Recent prompts</button><span id="cnt">0</span> / <span id="maxc">300</span></div>
+    <div class="count"><button type="button" class="ghost" id="recent" style="float:left;padding:2px 10px;font-size:13px">Recent prompts</button><span id="cnt">0</span> characters</div>
     <div id="plist" class="hide card" style="margin:8px 0 0;padding:6px;max-height:220px;overflow:auto"></div>
     <h2 style="margin-top:8px">5. Product image</h2>
     <label class="drop" id="drop"><input type="file" id="file" accept="image/png,image/jpeg,image/webp" class="hide">
@@ -165,7 +165,6 @@ function setFile(f){
 }
 async function init(){
   OPT=await api("/api/options");
-  $("#maxc").textContent=OPT.max_prompt_chars; $("#prompt").maxLength=OPT.max_prompt_chars;
   $("#models").innerHTML=OPT.models.map((m,i)=>`<label class="opt"><input type="checkbox" name="model" value="${esc(m.id)}" ${i===0?"checked":""}><div><b>${esc(m.id.replace("gpt-image-",""))}</b><span>${esc(m.label)}</span></div></label>`).join("");
   $("#quals").innerHTML=OPT.qualities.map((q,i)=>`<label class="opt q"><input type="checkbox" name="qual" value="${q}" ${i===0?"checked":""}><div><b>${q}</b></div></label>`).join("");
   $("#size").innerHTML=OPT.sizes.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join("");

@@ -148,7 +148,6 @@ def options():
         "models": [{"id": k, "label": v} for k, v in WEB_MODELS.items()],
         "qualities": WEB_QUALITIES,
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
-        "max_prompt_chars": core.MAX_PROMPT_CHARS,
         "max_upload_mb": core.MAX_UPLOAD_MB,
         # rough rupees per 1024x1024 image; the page scales this by pixel count
         "est_inr_1024": {q: round(ESTIMATE_1024[q] * USD_TO_INR, 2) for q in WEB_QUALITIES},
@@ -167,8 +166,6 @@ async def compare(
     prompt = prompt.strip()
     if not prompt:
         raise HTTPException(400, "Enter a prompt.")
-    if len(prompt) > core.MAX_PROMPT_CHARS:
-        raise HTTPException(400, f"Prompt must be {core.MAX_PROMPT_CHARS} characters or less.")
     models = [m for m in WEB_MODELS if m in models]            # keeps a fixed order, drops unknowns
     qualities = [q for q in WEB_QUALITIES if q in qualities]
     if not models or not qualities:

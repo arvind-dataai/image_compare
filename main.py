@@ -28,7 +28,6 @@ QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
 TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-6.1-sol")  # reads the image + master prompt
 MAX_UPLOAD_MB = 10
 ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
-MAX_PROMPT_CHARS = 300
 
 app = FastAPI(title="Image Generation Backend")
 client = OpenAI()  # reads OPENAI_API_KEY from the environment
@@ -156,7 +155,7 @@ def _image_response(png: bytes, cost: float, model: str, quality: str, folder: s
 @app.post("/generate/custom", response_class=Response)
 async def generate_custom(
     image: UploadFile = File(...),
-    prompt: str = Form(..., max_length=MAX_PROMPT_CHARS),
+    prompt: str = Form(...),
     model: Model | None = Form(None, description="Defaults to OPENAI_IMAGE_MODEL"),
     quality: Quality | None = Form(None, description="Defaults to OPENAI_IMAGE_QUALITY"),
     size: str = Form("1024x1024"),
