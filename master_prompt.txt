@@ -1,0 +1,631 @@
+MASTER PRODUCT ADVERTISING PROMPT
+
+FEED AD — 4:5 PORTRAIT | 1080 × 1350 PX
+
+OBJECTIVE
+
+Analyze the uploaded product image and create three outstanding, professionally art-directed advertising photographs specifically optimized for a mobile social-media feed.
+
+The three required advertising categories are:
+
+1. AI Model Ad
+2. Lifestyle Ad
+3. Studio Ad
+
+For EACH category, develop 3 genuinely different creative concepts, evaluate them, select the strongest concept, and produce ONE final advertisement from the winning concept.
+
+Final deliverables: exactly 3 separate finished advertising images.
+
+Every final image must be a standalone vertical Feed Ad.
+
+⸻
+
+1. MANDATORY IMAGE FORMAT
+
+Advertising placement: Social Media Feed Ad
+Aspect ratio: 4:5 portrait
+Final resolution: 1080 × 1350 pixels
+Orientation: Vertical
+Number of final images: 3 independent outputs
+
+Strict format requirements
+
+* Compose every concept specifically for a 4:5 portrait canvas from the beginning.
+* Do not create landscape or square compositions that will later require destructive cropping.
+* Maintain a visually balanced vertical composition.
+* Keep the product large enough to be immediately recognizable on a mobile screen.
+* Protect important product features from the image edges.
+* Maintain approximately 5–8% breathing room around important visual details wherever the composition allows.
+* Keep the principal product and focal interaction within a central, crop-tolerant area where practical.
+* Allow sufficient headroom and lower-frame space for a deliberate professional composition.
+* Avoid excessive empty space that makes the product appear small.
+* Avoid extreme close-ups that cut off identity-critical product components.
+* Design a clear visual hierarchy that remains understandable when viewed as a small mobile-feed image.
+* Use negative space only where it strengthens the advertisement.
+
+The entire composition must feel purpose-built for a premium 4:5 feed advertisement.
+
+If the image-generation system cannot output 1080 × 1350 natively, create the closest suitable high-resolution 4:5 image, then fit and resize it to exactly 1080 × 1350 without stretching, deforming, or cropping important product details.
+
+⸻
+
+2. IDENTIFY AND ANALYZE THE PRODUCT
+
+Carefully inspect the uploaded reference image.
+
+Identify:
+
+* Primary product category
+* Most plausible product identity
+* Shape and proportions
+* Visible construction
+* Number and arrangement of components
+* Apparent colour
+* Material appearance
+* Texture and finish
+* Transparency or opacity
+* Printed patterns
+* Decorative details
+* Visible branding and text
+* Packaging
+* Included or associated accessories
+* Distinctive product characteristics
+* Reference-image quality and limitations
+
+Separate:
+
+OBSERVED: Directly supported by the image.
+
+INFERRED: Reasonable interpretation, not confirmed commercial truth.
+
+UNKNOWN: Information that cannot reliably be determined.
+
+Never invent specifications, ingredients, materials, contents, prices, brands, offers, certifications or performance claims.
+
+⸻
+
+3. EXPLORE REASONABLE COMMERCIAL INTERPRETATIONS
+
+Consider the product’s primary identity and other genuinely plausible commercial uses.
+
+Explore relevant possibilities such as:
+
+* Everyday consumer use
+* Fashion or personal use
+* Household use
+* Interior styling
+* Hospitality
+* Gifting
+* Events and celebrations
+* Professional or commercial use
+* Display or decoration
+* Packaging or storage, where relevant
+* Refillable or reusable use, where supported
+
+Classify meaningful alternatives as:
+
+* HIGH PLAUSIBILITY
+* MEDIUM PLAUSIBILITY
+* LOW PLAUSIBILITY / CREATIVE ALTERNATIVE
+
+Important: Creative alternatives are brainstorming inputs, not permission to advertise the wrong product.
+
+The final concepts must remain commercially appropriate for the actual item. Do not transform an uncertain product into a different sellable product merely to make the advertisement more interesting.
+
+⸻
+
+4. ESTABLISH PRODUCT PRESERVATION RULES
+
+Treat the uploaded product as the authoritative visual reference.
+
+Preserve all identity-critical visible characteristics, including:
+
+* Silhouette
+* Shape
+* Proportions
+* Construction
+* Component count
+* Component placement
+* Original colours
+* Printed patterns and motif scale
+* Material appearance
+* Texture
+* Transparency
+* Surface finish
+* Embroidery or decorative work
+* Visible legitimate branding
+* Distinctive identifying details
+
+The image may change:
+
+* Environment
+* Background
+* Lighting
+* Composition
+* Camera framing
+* Supporting props
+* Model styling
+* Mood
+* Visual atmosphere
+
+The image must not fundamentally redesign the product.
+
+Do not reveal important unseen backs, sides, closures or structural details if doing so requires inventing them.
+
+Remove visually distracting non-product elements when appropriate, such as display stands, price tags, surrounding clutter or watermarks, without removing genuine product components.
+
+Product fidelity takes priority over artistic spectacle.
+
+⸻
+
+5. FEED AD CREATIVE DIRECTION
+
+Every concept must meet these mobile advertising standards.
+
+Immediate visual impact
+
+The composition should communicate its main visual idea almost instantly while scrolling.
+
+Use:
+
+* A strong focal point
+* Clear subject separation
+* Purposeful lighting
+* Elegant contrast
+* Professional colour harmony
+* A distinctive but believable creative idea
+
+Product dominance
+
+The actual product must remain the visual hero.
+
+The model, environment, props and decorative elements must support the product rather than compete with it.
+
+Mobile readability
+
+The main product must be recognizable even when displayed at reduced size.
+
+Avoid:
+
+* Tiny product placement
+* Excessive background complexity
+* Crowded compositions
+* Unnecessary visual elements
+* Important details placed at the extreme edges
+* Excessive wide-angle distortion
+* Overly dark or visually muddy scenes
+
+Photographic quality
+
+Aim for:
+
+* High-end commercial realism
+* Detailed product textures
+* Physically plausible shadows
+* Natural contact between objects
+* Controlled reflections
+* Realistic lighting falloff
+* Correct proportions
+* Realistic human anatomy
+* Refined professional colour grading
+
+Text handling
+
+By default, create text-free advertising masters.
+
+Do not add:
+
+* Invented headlines
+* Prices
+* Discounts
+* Calls to action
+* Social-media interface elements
+* Watermarks
+* Decorative typography
+* AI-generated brand names
+
+Preserve existing product branding where visible and relevant.
+
+If promotional text is explicitly supplied later, reserve appropriate space for a separate accurate typography layer.
+
+⸻
+
+6. CREATE 3 AI MODEL AD CONCEPTS
+
+Develop 3 genuinely different AI Model advertising concepts.
+
+The product should be naturally worn, held, carried, presented or meaningfully interacted with by a believable synthetic human model, where suitable.
+
+Explore different commercially appropriate directions, not superficial wardrobe or lighting variations.
+
+For EACH concept specify:
+
+1. Creative idea and advertising narrative
+2. Model presentation and styling
+3. Appropriate age presentation
+4. Wardrobe
+5. Pose and facial expression
+6. Hand positioning
+7. Exact product interaction
+8. Product position, scale and visibility
+9. Setting and supporting props
+10. 4:5 portrait composition
+11. Camera angle and distance
+12. Framing and photographic lens feel
+13. Lighting direction and quality
+14. Shadows and reflections
+15. Depth of field
+16. Colour palette and mood
+17. Mobile-feed focal hierarchy
+18. Product-preservation instructions
+19. Negative constraints
+
+AI Model composition requirements
+
+* Keep the product large and clearly identifiable.
+* Use framing appropriate to the product’s physical size.
+* Ensure the product is not hidden by hair, hands, clothing or props.
+* Use realistic body proportions, grip, wearing position and scale.
+* Do not copy the identity of a real person from the reference photograph.
+* Keep important model anatomy and product features safely within the 4:5 frame.
+* Avoid unnecessarily distant full-body compositions for very small products.
+
+Each concept must have its own complete, standalone generation-ready prompt.
+
+⸻
+
+7. SELECT THE BEST AI MODEL AD
+
+Compare the three concepts based on:
+
+* Product fidelity
+* Product visibility
+* Believable human interaction
+* Portrait framing
+* Photorealism
+* Visual impact
+* Commercial suitability
+* Emotional appeal
+* Mobile-feed effectiveness
+* Overall advertising quality
+
+Select ONE winner.
+
+Rewrite it as:
+
+WINNER 1 — BEST AI MODEL FEED AD PROMPT
+
+The winning prompt must be complete, detailed and immediately usable for image generation at 4:5 portrait.
+
+⸻
+
+8. CREATE 3 LIFESTYLE AD CONCEPTS
+
+Develop 3 genuinely different Lifestyle advertising concepts.
+
+Show the product naturally existing or being used in an appropriate real-world environment.
+
+Possible contexts include, where suitable:
+
+* Premium home
+* Modern apartment
+* Bedroom
+* Kitchen
+* Dining environment
+* Café
+* Hotel
+* Travel
+* Workplace
+* Outdoor setting
+* Fashion environment
+* Everyday living
+* Celebration
+* Hospitality
+* Gifting
+
+Select environments according to the actual product.
+
+For EACH concept specify:
+
+1. Lifestyle scenario
+2. Commercial story
+3. Product use and placement
+4. Environment
+5. Supporting objects and props
+6. Foreground and background
+7. Human presence where appropriate
+8. 4:5 vertical composition
+9. Camera viewpoint
+10. Camera distance and framing
+11. Lighting and time of day
+12. Shadows and reflections
+13. Atmosphere and depth of field
+14. Colour harmony
+15. Product prominence
+16. Mobile-feed readability
+17. Photographic realism
+18. Product-preservation rules
+19. Negative constraints
+
+Lifestyle composition requirements
+
+* Product must be immediately recognizable.
+* The environment must support its genuine or reliably understood use.
+* Avoid placing the product so far away that its design is lost.
+* Use natural photographic perspective.
+* Keep props subordinate to the product.
+* Ensure the scene feels lived-in and believable without becoming visually cluttered.
+* Do not invent unsupported product functions.
+
+Each concept must have a complete, standalone generation-ready prompt.
+
+⸻
+
+9. SELECT THE BEST LIFESTYLE AD
+
+Evaluate the three concepts based on:
+
+* Product relevance
+* Product accuracy
+* Natural storytelling
+* Product visibility
+* Realism
+* Vertical composition
+* Emotional impact
+* Commercial usefulness
+* Mobile-feed effectiveness
+* Overall creative quality
+
+Select ONE winner.
+
+Rewrite it as:
+
+WINNER 2 — BEST LIFESTYLE FEED AD PROMPT
+
+The prompt must be optimized specifically for 4:5 portrait composition.
+
+⸻
+
+10. CREATE 3 STUDIO AD CONCEPTS
+
+Develop 3 genuinely different high-end Studio advertising concepts.
+
+Explore distinct photographic treatments such as:
+
+* Minimal premium studio
+* Luxury pedestal
+* Editorial product photography
+* Dramatic sculptural lighting
+* High-key commercial presentation
+* Low-key premium presentation
+* Architectural studio setup
+* Refined reflective surfaces
+* Elegant tonal composition
+* Controlled macro/detail-oriented composition
+
+For EACH concept specify:
+
+1. Studio concept
+2. Background and visual treatment
+3. Product placement and orientation
+4. Surface or pedestal
+5. Supporting props where appropriate
+6. 4:5 portrait framing
+7. Camera position and angle
+8. Camera distance
+9. Lens/photographic feel
+10. Key light
+11. Fill light
+12. Rim or backlighting if applicable
+13. Highlights
+14. Contact shadows
+15. Reflections
+16. Material rendering
+17. Colour palette
+18. Negative space
+19. Product scale and dominance
+20. Technical photographic quality
+21. Negative constraints
+
+Studio composition requirements
+
+* Product should visually dominate the frame.
+* Preserve product geometry and design.
+* Maintain elegant, controlled reflections.
+* Do not use impractical floating-product effects unless the result is believable.
+* Avoid props that imply unverified ingredients, materials or product claims.
+* Use the taller 4:5 canvas deliberately, rather than centering a tiny product inside excessive empty space.
+* Where useful, test preserving the real product pixels and replacing only the environment.
+
+Each concept must contain a complete, standalone generation-ready prompt.
+
+⸻
+
+11. SELECT THE BEST STUDIO AD
+
+Evaluate the three concepts based on:
+
+* Product fidelity
+* Product clarity
+* Premium appearance
+* Lighting quality
+* Technical photographic quality
+* Vertical composition
+* Distinctive visual appeal
+* Commercial usefulness
+* Mobile-feed effectiveness
+
+Select ONE winner.
+
+Rewrite it as:
+
+WINNER 3 — BEST STUDIO FEED AD PROMPT
+
+The prompt must be complete and ready for generation in a 4:5 portrait canvas.
+
+⸻
+
+12. FINAL THREE WINNING PROMPTS
+
+Present the three selected prompts clearly:
+
+WINNER 1 — AI MODEL FEED AD
+
+Complete generation-ready prompt.
+
+Format: 4:5 portrait, 1080 × 1350 px.
+
+WINNER 2 — LIFESTYLE FEED AD
+
+Complete generation-ready prompt.
+
+Format: 4:5 portrait, 1080 × 1350 px.
+
+WINNER 3 — STUDIO FEED AD
+
+Complete generation-ready prompt.
+
+Format: 4:5 portrait, 1080 × 1350 px.
+
+Each prompt must independently contain all necessary product-preservation, composition, photographic, format and negative instructions.
+
+Do not rely on another winning prompt for missing details.
+
+⸻
+
+13. GENERATE THE THREE FINAL IMAGES
+
+Using the original uploaded product image and the three winning prompts, execute three separate image-generation operations.
+
+IMAGE 1 — BEST AI MODEL AD
+
+* One standalone image
+* 4:5 vertical
+* Final resolution 1080 × 1350
+* Synthetic model with believable product interaction
+* Strong mobile-feed composition
+
+IMAGE 2 — BEST LIFESTYLE AD
+
+* One standalone image
+* 4:5 vertical
+* Final resolution 1080 × 1350
+* Believable real-world environment
+* Product-first storytelling
+
+IMAGE 3 — BEST STUDIO AD
+
+* One standalone image
+* 4:5 vertical
+* Final resolution 1080 × 1350
+* Premium product-focused photography
+* Controlled studio presentation
+
+NON-NEGOTIABLE:
+
+* Generate each image independently.
+* Do not combine multiple advertisements in one canvas.
+* Do not create a collage, triptych, contact sheet or comparison layout.
+* Do not add category headings within the images.
+* Do not insert prompts into the images.
+* Do not add unsupported text or claims.
+* Do not distort the product to force the composition.
+* Do not change the aspect ratio.
+* Do not cut off important product features.
+
+If only one image can be generated per operation, execute three independent operations using the three selected prompts.
+
+⸻
+
+14. FINAL QUALITY CONTROL
+
+Before accepting each finished image, verify:
+
+Format
+
+* Correct 4:5 aspect ratio
+* Final image is 1080 × 1350 pixels
+* No stretching or deformation
+* No unintended crop
+* Single advertisement per image
+
+Product fidelity
+
+* Same recognizable product as the reference
+* Correct visible shape and construction
+* Correct major colours
+* Correct visible component count
+* Preserved patterns, decorative details and identity-critical features
+* No invented product variants
+* No unsupported visible branding
+
+Photography
+
+* Professional lighting
+* Realistic surfaces and textures
+* Plausible shadows and reflections
+* Natural human anatomy where present
+* Believable product scale and contact
+* No obvious generative artifacts
+
+Advertising quality
+
+* Strong central visual idea
+* Product immediately recognizable on mobile
+* Clear visual hierarchy
+* Controlled clutter
+* Visually compelling 4:5 composition
+* Suitable for independent publication in a social-media feed
+
+Commercial correctness
+
+* No unsupported product claims
+* No fabricated prices or offers
+* No misleading product use
+* No invented included accessories or product quantities
+
+If a result fails an important requirement, revise and regenerate only that image.
+
+Never accept an advertisement merely because it looks attractive if it materially misrepresents the product.
+
+⸻
+
+15. CREATIVE DIVERSITY RULE
+
+Within each category, the 3 concepts must be meaningfully distinct.
+
+Do not manufacture diversity through minor changes in:
+
+* Background colour
+* Small props
+* Camera angle
+* Clothing
+* Lighting intensity
+
+The differences should involve genuinely different creative ideas, compositions, environments, visual narratives or photographic approaches.
+
+The three final winners must also remain visually distinct from one another.
+
+⸻
+
+16. FINAL OUTPUT ORDER
+
+1. Product Identification
+2. Plausible Product Identities and Uses
+3. Advertising Feasibility
+4. 3 AI Model Concepts and Prompts
+5. Best AI Model Feed Ad Prompt
+6. 3 Lifestyle Concepts and Prompts
+7. Best Lifestyle Feed Ad Prompt
+8. 3 Studio Concepts and Prompts
+9. Best Studio Feed Ad Prompt
+10. Final Three Winning Prompts
+11. Generate Image 1 — AI Model Feed Ad
+12. Generate Image 2 — Lifestyle Feed Ad
+13. Generate Image 3 — Studio Feed Ad
+
+FINAL REQUIREMENT
+
+Create exactly three separate, premium-quality, photorealistic advertising images, each optimized for a 4:5 portrait social-media feed and delivered at 1080 × 1350 pixels.
+
+Every image must preserve the original product’s visible identity, communicate a strong commercial visual idea, and stand alone as a finished professional advertisement.

@@ -1,0 +1,10 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+outputs/
+comparisons/
+cost_log*.csv
+*.zip
+.DS_Store
