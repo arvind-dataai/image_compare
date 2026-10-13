@@ -10,6 +10,7 @@ Set the exchange rate in .env:  USD_TO_INR=96.64
 """
 import csv
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -36,6 +37,8 @@ ESTIMATE_1024 = {
     "max": 0.21072,
     "auto": 0.05268,
 }
+
+_LOG_LOCK = threading.Lock()   # several images/steps can finish at once; keep the running total correct
 
 LOG_FIELDS = [
     "time", "model", "quality", "size", "input_tokens", "output_tokens",
@@ -108,21 +111,22 @@ def log_cost(log_path, model, quality, size, usage, note=""):
     cost, source, in_tok, out_tok = compute_cost(usage, quality)
     p = Path(log_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    _archive_old_log(p)
-    running = total_so_far(p) + cost
-    new_file = not p.is_file()
-    with open(p, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
-        if new_file:
-            w.writeheader()
-        w.writerow({
-            "time": datetime.now().isoformat(timespec="seconds"),
-            "model": model, "quality": quality, "size": size,
-            "input_tokens": in_tok, "output_tokens": out_tok,
-            "cost_inr": f"{cost:.4f}", "cost_source": source,
-            "running_total_inr": f"{running:.4f}", "usd_to_inr": f"{USD_TO_INR:.2f}",
-            "note": note,
-        })
+    with _LOG_LOCK:
+        _archive_old_log(p)
+        running = total_so_far(p) + cost
+        new_file = not p.is_file()
+        with open(p, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
+            if new_file:
+                w.writeheader()
+            w.writerow({
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "model": model, "quality": quality, "size": size,
+                "input_tokens": in_tok, "output_tokens": out_tok,
+                "cost_inr": f"{cost:.4f}", "cost_source": source,
+                "running_total_inr": f"{running:.4f}", "usd_to_inr": f"{USD_TO_INR:.2f}",
+                "note": note,
+            })
     return cost, source, running
 
 
@@ -145,19 +149,20 @@ def log_text_cost(log_path, model, usage, note=""):
     source = "usage" if (in_tok or out_tok) and model in TEXT_RATES_PER_M else "unknown"
     p = Path(log_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    _archive_old_log(p)
-    running = total_so_far(p) + cost
-    new_file = not p.is_file()
-    with open(p, "a", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
-        if new_file:
-            w.writeheader()
-        w.writerow({
-            "time": datetime.now().isoformat(timespec="seconds"),
-            "model": model, "quality": "text", "size": "n/a",
-            "input_tokens": in_tok, "output_tokens": out_tok,
-            "cost_inr": f"{cost:.4f}", "cost_source": source,
-            "running_total_inr": f"{running:.4f}", "usd_to_inr": f"{USD_TO_INR:.2f}",
-            "note": note,
-        })
+    with _LOG_LOCK:
+        _archive_old_log(p)
+        running = total_so_far(p) + cost
+        new_file = not p.is_file()
+        with open(p, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
+            if new_file:
+                w.writeheader()
+            w.writerow({
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "model": model, "quality": "text", "size": "n/a",
+                "input_tokens": in_tok, "output_tokens": out_tok,
+                "cost_inr": f"{cost:.4f}", "cost_source": source,
+                "running_total_inr": f"{running:.4f}", "usd_to_inr": f"{USD_TO_INR:.2f}",
+                "note": note,
+            })
     return cost, source, running

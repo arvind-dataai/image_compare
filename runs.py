@@ -70,6 +70,8 @@ th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white
 td:first-child{white-space:normal}
 .n{text-align:right;font-variant-numeric:tabular-nums}
 .tot td{font-weight:700;border-bottom:0}
+.sec td{background:#f1f3f7;font-weight:700;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+.sub td{font-weight:600;background:#fafbfc}
 .note{color:var(--mute);font-size:12.5px;margin:8px 0 0}
 .err{padding:16px 12px;color:var(--err);word-break:break-word;font-size:14px}
 details{border-top:1px solid var(--line);padding:8px 12px;font-size:13px}
@@ -87,6 +89,50 @@ document.querySelectorAll('.card img').forEach(i=>i.addEventListener('click',()=
 lb.addEventListener('click',()=>lb.style.display='none');
 document.addEventListener('keydown',e=>{if(e.key==='Escape')lb.style.display='none'});
 """
+
+
+def split_costs(costs) -> tuple:
+    """(analysis_total, image_total) in rupees; a step is 'analysis' if its label starts with Analysis."""
+    ana = sum(c["cost_inr"] for c in costs or [] if c["part"].startswith("Analysis"))
+    img = sum(c["cost_inr"] for c in costs or [] if not c["part"].startswith("Analysis"))
+    return ana, img
+
+
+def _cost_block(costs) -> str:
+    """The 'What it cost' table: analysis steps and image steps listed apart, each with a subtotal."""
+    if not costs:
+        return ""
+    e = html.escape
+
+    def rows_for(items):
+        return "".join(
+            f'<tr><td>{e(c["part"])}</td><td>{e(c["model"])}</td>'
+            f'<td class="n">{c["tokens_in"]:,}</td><td class="n">{c["tokens_out"]:,}</td>'
+            f'<td class="n">\u20b9{c["cost_inr"]:.2f}</td><td>{e(c.get("source", ""))}</td></tr>'
+            for c in items)
+
+    def section(title, items):
+        if not items:
+            return ""
+        sub = sum(c["cost_inr"] for c in items)
+        return (f'<tr class="sec"><td colspan="6">{title}</td></tr>{rows_for(items)}'
+                f'<tr class="sub"><td colspan="4">Subtotal: {title.lower()}</td>'
+                f'<td class="n">\u20b9{sub:.2f}</td><td></td></tr>')
+
+    ana = [c for c in costs if c["part"].startswith("Analysis")]
+    img = [c for c in costs if not c["part"].startswith("Analysis")]
+    total = sum(c["cost_inr"] for c in costs)
+    return (
+        '<div class="costs"><h2>What it cost to generate</h2>'
+        f'<p><b>Analysis \u20b9{sum(c["cost_inr"] for c in ana):.2f} \u00b7 Images \u20b9{sum(c["cost_inr"] for c in img):.2f} '
+        f'\u00b7 Total \u20b9{total:.2f}</b></p><div class="tw"><table>'
+        '<tr><th>Step</th><th>Model</th><th class="n">Tokens in</th><th class="n">Tokens out</th>'
+        f'<th class="n">Cost (\u20b9)</th><th>Source</th></tr>'
+        f'{section("Analysis (text model)", ana)}{section("Image generation", img)}'
+        f'<tr class="tot"><td colspan="4">Total (analysis + images)</td><td class="n">\u20b9{total:.2f}</td><td></td></tr>'
+        f'</table></div><p class="note">Costs are computed from the token usage OpenAI returned, converted at '
+        f'\u20b9{USD_TO_INR:.2f} per US dollar. "estimate" means OpenAI sent no usage data.</p></div>'
+    )
 
 
 def write_comparison(run_dir: Path, title: str, input_file: str, items: list, meta: dict, analysis: str = "",
@@ -125,23 +171,7 @@ def write_comparison(run_dir: Path, title: str, input_file: str, items: list, me
                  f"<pre>{e(full_prompt)}</pre>") if full_prompt else ""
         prompt_block = (f'<div class="costs"><details><summary>Prompt used</summary>'
                         f'<pre>{e(prompt)}</pre>{extra}</details></div>')
-    cost_block = ""
-    if costs:
-        rows = "".join(
-            f'<tr><td>{e(c["part"])}</td><td>{e(c["model"])}</td>'
-            f'<td class="n">{c["tokens_in"]:,}</td><td class="n">{c["tokens_out"]:,}</td>'
-            f'<td class="n">\u20b9{c["cost_inr"]:.2f}</td><td>{e(c.get("source", ""))}</td></tr>'
-            for c in costs
-        )
-        total = sum(c["cost_inr"] for c in costs)
-        cost_block = (
-            '<div class="costs"><h2>What it cost to generate</h2><div class="tw"><table>'
-            '<tr><th>Step</th><th>Model</th><th class="n">Tokens in</th><th class="n">Tokens out</th>'
-            f'<th class="n">Cost (\u20b9)</th><th>Source</th></tr>{rows}'
-            f'<tr class="tot"><td colspan="4">Total</td><td class="n">\u20b9{total:.2f}</td><td></td></tr>'
-            f'</table></div><p class="note">Costs are computed from the token usage OpenAI returned, converted at '
-            f'\u20b9{USD_TO_INR:.2f} per US dollar. "estimate" means OpenAI sent no usage data.</p></div>'
-        )
+    cost_block = _cost_block(costs)
     analysis_block = (
         f'<div class="analysis"><details><summary>Full AI analysis (steps 1 to 10)</summary>'
         f"<pre>{e(analysis)}</pre></details></div>" if analysis else ""
@@ -220,3 +250,102 @@ def write_index(output_dir: Path) -> Path:
     out = output_dir / "index.html"
     out.write_text(page, encoding="utf-8")
     return out
+
+
+_FLOW_CSS = """
+.top{display:grid;grid-template-columns:minmax(160px,260px) 1fr;gap:16px;align-items:start;margin:0 0 20px}
+@media (max-width:640px){.top{grid-template-columns:1fr}}
+.top .card{margin:0}
+.ptxt{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.ptxt h2,.branch h2{font-size:16px;margin:0 0 6px}
+.branch{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 20px}
+.bh{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin:0 0 10px}
+.bh .t{font-size:17px;font-weight:700}
+.chip{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;color:var(--mute)}
+.chip.ok{color:var(--accent);border-color:var(--accent)}
+.box{border:1px solid var(--line);border-radius:8px;padding:6px 12px;margin:0 0 10px;background:var(--bg)}
+.box details{border:0;padding:4px 0}
+.box summary{font-weight:600}
+.box pre{max-height:360px;overflow:auto;font-family:inherit;font-size:13.5px}
+.box.prompt{border-color:var(--accent)}
+.arrow{color:var(--mute);font-size:13px;margin:4px 0 10px}
+.arrow:before{content:"\\2193  "}
+"""
+
+
+def write_flow_comparison(run_dir: Path, title: str, input_file: str, prompt: str, branches: list,
+                          meta: dict, costs: list | None = None) -> Path:
+    """comparison.html for a text-model -> image-model run, plus run.json for History.
+
+    branches: [{label, kind ("text"|"direct"), text_model?, effort?, analysis?, final_prompt?, error?,
+                text_cost_inr?, items: [{label, file, cost_inr, error}]}]
+    """
+    e = html.escape
+    parts = []
+    for b in branches:
+        costs_txt = f'<span class="chip">analysis \u20b9{b["text_cost_inr"]:.2f}</span>' if b.get("text_cost_inr") is not None else ""
+        if b["kind"] == "text":
+            head = (f'<div class="bh"><span class="t">{e(b["text_model"])}</span>'
+                    f'<span class="chip">effort: {e(b["effort"])}</span>{costs_txt}</div>')
+            box = ""
+            if b.get("analysis"):
+                box += (f'<div class="box"><details open><summary>Analysis by {e(b["text_model"])} ({e(b["effort"])})</summary>'
+                        f'<pre>{e(b["analysis"])}</pre></details></div>')
+            if b.get("final_prompt"):
+                box += (f'<div class="box prompt"><details open><summary>Prompt it wrote for the image model</summary>'
+                        f'<pre>{e(b["final_prompt"])}</pre></details></div>')
+            if b.get("error"):
+                box += f'<div class="err">{e(b["error"])}</div>'
+        else:
+            head = '<div class="bh"><span class="t">Direct</span><span class="chip">your prompt, no text model</span></div>'
+            box = (f'<div class="box prompt"><details><summary>Prompt sent to the image model (your prompt plus the standard '
+                   f'preservation rules)</summary><pre>{e(b.get("final_prompt", ""))}</pre></details></div>')
+        cards = []
+        for it in b["items"]:
+            if it.get("file"):
+                body = f'<img src="{_data_uri(run_dir / it["file"])}" alt="{e(it["label"])}">'
+            else:
+                body = f'<div class="err">Not generated: {e(str(it.get("error") or "unknown error"))}</div>'
+            sub = f'\u20b9{it["cost_inr"]:.2f}' if it.get("cost_inr") is not None else ""
+            cards.append(f'<div class="card">{body}<div class="cap"><div class="t">{e(it["label"])}</div>'
+                         f'<div class="s">{sub}</div></div></div>')
+        parts.append(f'<div class="branch">{head}{box}<div class="arrow">sent to the image model(s)</div>'
+                     f'<div class="grid">{"".join(cards)}</div></div>')
+
+    meta_line = " &nbsp;|&nbsp; ".join(f"{e(k)}: <b>{e(str(v))}</b>" for k, v in meta.items() if k != "Prompt")
+    top = (f'<div class="top"><div class="card input"><img src="{_data_uri(run_dir / input_file)}" alt="Input image">'
+           f'<div class="cap"><div class="t">Original (input)</div></div></div>'
+           f'<div class="ptxt"><h2>Your prompt</h2><pre style="font-family:inherit;font-size:14px">{e(prompt)}</pre>'
+           f'<p class="note">Flow: image + prompt \u2192 text model (analysis, written prompt) \u2192 image model \u2192 image. '
+           f'Each text model and effort below is its own branch.</p></div></div>')
+    page = (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)}</title>'
+        f"<style>{_CSS}{_FLOW_CSS}</style></head><body><div class=\"wrap\">"
+        f"<h1>{e(title)}</h1>"
+        f'<p class="meta">{meta_line} &nbsp;|&nbsp; {datetime.now():%d %b %Y, %H:%M}</p>'
+        f'{top}{_cost_block(costs)}{"".join(parts)}</div>'
+        f'<div id="lb"><img alt=""></div><script>{_JS}</script></body></html>'
+    )
+    (run_dir / "comparison.html").write_text(page, encoding="utf-8")
+
+    only_direct = all(b["kind"] == "direct" for b in branches)
+    flat = []
+    for b in branches:
+        for it in b["items"]:
+            flat.append({"label": it["label"] if only_direct else f'{b["label"]} \u2192 {it["label"]}',
+                         "file": it.get("file"), "cost_inr": it.get("cost_inr")})
+    total = sum(c["cost_inr"] for c in costs) if costs else sum(i.get("cost_inr") or 0 for i in flat)
+    keep = ("id", "kind", "label", "text_model", "effort", "analysis", "final_prompt", "error", "text_cost_inr", "status")
+    (run_dir / "run.json").write_text(json.dumps({
+        "title": title, "input": input_file, "meta": meta, "total_inr": total, "items": flat,
+        "branches": [{**{k: b[k] for k in keep if k in b},
+                      "items": [{k: it.get(k) for k in ("label", "model", "quality", "file", "cost_inr", "error", "status")}
+                                for it in b["items"]]} for b in branches],
+        "time": f"{datetime.now():%d %b %Y, %H:%M}",
+    }, ensure_ascii=False), encoding="utf-8")
+    try:
+        write_index(run_dir.parent)
+    except Exception:
+        pass
+    return run_dir / "comparison.html"

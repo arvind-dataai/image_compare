@@ -60,6 +60,21 @@ th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 #lb{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:9;cursor:zoom-out;padding:16px}
 #lb img{max-width:100%;max-height:100%;border-radius:6px}
+.branch{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 16px}
+.bh{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;margin:0 0 8px}
+.bh .t{font-size:16px;font-weight:700}
+.chip{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 10px;color:var(--mute)}
+.chip.run{color:var(--accent);border-color:var(--accent)}.chip.bad{color:var(--err);border-color:var(--err)}
+.box{border:1px solid var(--line);border-radius:8px;padding:4px 12px;margin:0 0 8px;background:var(--bg)}
+.box.prompt{border-color:var(--accent)}
+.box summary{cursor:pointer;font-weight:600;padding:4px 0}
+.box pre{white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto;margin:4px 0 8px;font-size:13px;line-height:1.5;font-family:inherit}
+.arrow{color:var(--mute);font-size:13px;margin:2px 0 8px}
+.top{display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:12px;align-items:start;margin:0 0 14px}
+@media (max-width:640px){.top{grid-template-columns:1fr}}
+.top .ptxt{padding:2px 4px}.top .ptxt pre{white-space:pre-wrap;margin:4px 0;font-size:14px;line-height:1.5;font-family:inherit}
+.sub{font-size:13px;color:var(--mute);margin:10px 0 4px}
+.opt.off{opacity:.45}
 .hide{display:none}
 </style>
 </head>
@@ -77,19 +92,23 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
  <div class="card">
   <div class="form">
    <div>
-    <h2>1. Models <span class="hint">(pick one or both)</span></h2>
+    <h2>1. Analysis step <span class="hint">(optional: a text model studies the photo and writes the image prompt)</span></h2>
+    <div class="opts" id="tmodels"></div>
+    <div class="sub">Effort: how hard the text model thinks (a model runs once per effort you tick)</div>
+    <div class="opts" id="efforts"></div>
+    <h2 style="margin-top:16px">2. Image models <span class="hint">(pick one or both)</span></h2>
     <div class="opts" id="models"></div>
-    <h2 style="margin-top:16px">2. Quality <span class="hint">(pick one or more)</span></h2>
+    <h2 style="margin-top:16px">3. Quality <span class="hint">(pick one or more)</span></h2>
     <div class="opts" id="quals"></div>
-    <h2 style="margin-top:16px">3. Size</h2>
+    <h2 style="margin-top:16px">4. Size</h2>
     <select id="size"></select>
    </div>
    <div>
-    <h2>4. Prompt</h2>
+    <h2>5. Prompt</h2>
     <textarea id="prompt" placeholder="e.g. on a wooden table with morning sunlight"></textarea>
     <div class="count"><button type="button" class="ghost" id="recent" style="float:left;padding:2px 10px;font-size:13px">Recent prompts</button><span id="cnt">0</span> characters</div>
     <div id="plist" class="hide card" style="margin:8px 0 0;padding:6px;max-height:220px;overflow:auto"></div>
-    <h2 style="margin-top:8px">5. Product image</h2>
+    <h2 style="margin-top:8px">6. Product image</h2>
     <label class="drop" id="drop"><input type="file" id="file" accept="image/png,image/jpeg,image/webp" class="hide">
       <div id="dropin">Click or drop an image here (PNG, JPEG, WEBP)</div></label>
    </div>
@@ -102,7 +121,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
  </div>
  <div id="result" class="hide card">
   <div class="bar" id="bar"></div>
-  <div class="grid" id="rgrid"></div>
+  <div id="rbody"></div>
  </div>
 </section>
 
@@ -149,13 +168,37 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")$("#lb").style.displ
 
 /* ---------- form ---------- */
 function checked(name){return $$(`input[name=${name}]:checked`).map(x=>x.value)}
+function plans(){
+  const tm=checked("tmodel"), ef=checked("effort"), out=[];
+  for(const t of tm){const sup=OPT.text_models.find(x=>x.id===t).efforts; for(const x of ef) if(sup.includes(x)) out.push([t,x]);}
+  return out;
+}
+function textCost(t,x){
+  const m=OPT.text_models.find(y=>y.id===t);
+  return (OPT.est_text_in*m.rate_in+(OPT.est_text_out[x]||0)*m.rate_out)/1e6*OPT.usd_to_inr;
+}
 function update(){
-  const m=checked("model"), q=checked("qual"), n=m.length*q.length;
+  const m=checked("model"), q=checked("qual"), p=plans(), tm=checked("tmodel");
+  const direct=$("input[name=direct]").checked || !p.length;
+  const branches=p.length+(direct?1:0), per=m.length*q.length, n=branches*per;
   const [w,h]=$("#size").value.split("x").map(Number), px=w*h/1048576;
-  const est=m.length*q.reduce((a,x)=>a+(OPT.est_inr_1024[x]||0),0)*px;
-  $("#est").innerHTML=n?`<b>${n}</b> image${n>1?"s":""} · rough estimate <b>≈ ${inr(est)}</b> (actual cost is shown after)`:"";
+  const imgEst=branches*m.length*q.reduce((a,x)=>a+(OPT.est_inr_1024[x]||0),0)*px;
+  const txtEst=p.reduce((a,[t,x])=>a+textCost(t,x),0);
+  // grey out efforts no ticked model supports
+  $$("#efforts .opt").forEach(l=>{const x=l.querySelector("input").value;
+    l.classList.toggle("off", tm.length>0 && !tm.some(t=>OPT.text_models.find(y=>y.id===t).efforts.includes(x)));});
+  let msg="";
+  if(n&&per){
+    msg=`<b>${p.length}</b> text call${p.length===1?"":"s"} + <b>${n}</b> image${n===1?"":"s"}`
+       +(branches>1?` (${branches} branches × ${per})`:"")
+       +` · rough estimate <b>≈ ${inr(txtEst+imgEst)}</b> (real cost is shown after)`;
+  }
+  const over=n>OPT.max_images;
+  if(over) msg+=` <span class="msg">Too many images (limit ${OPT.max_images}). Select fewer options.</span>`;
+  if(tm.length&&!p.length) msg+=` <span class="msg">Tick an effort level that the selected text model supports.</span>`;
+  $("#est").innerHTML=msg;
   $("#cnt").textContent=$("#prompt").value.length;
-  $("#run").disabled=!(n&&file&&$("#prompt").value.trim());
+  $("#run").disabled=!(per&&file&&$("#prompt").value.trim())||over||(tm.length>0&&!p.length);
 }
 function setFile(f){
   if(!f)return; file=f;
@@ -165,6 +208,9 @@ function setFile(f){
 }
 async function init(){
   OPT=await api("/api/options");
+  $("#tmodels").innerHTML=`<label class="opt"><input type="checkbox" name="direct" checked><div><b>Direct</b><span>Send my prompt as it is, no text model</span></div></label>`
+    +OPT.text_models.map(t=>`<label class="opt"><input type="checkbox" name="tmodel" value="${esc(t.id)}"><div><b>${esc(t.id)}</b><span>${esc(t.label)}</span></div></label>`).join("");
+  $("#efforts").innerHTML=OPT.efforts.map((x,i)=>`<label class="opt q"><input type="checkbox" name="effort" value="${x}" ${x==="low"?"checked":""}><div><b>${x}</b></div></label>`).join("");
   $("#models").innerHTML=OPT.models.map((m,i)=>`<label class="opt"><input type="checkbox" name="model" value="${esc(m.id)}" ${i===0?"checked":""}><div><b>${esc(m.id.replace("gpt-image-",""))}</b><span>${esc(m.label)}</span></div></label>`).join("");
   $("#quals").innerHTML=OPT.qualities.map((q,i)=>`<label class="opt q"><input type="checkbox" name="qual" value="${q}" ${i===0?"checked":""}><div><b>${q}</b></div></label>`).join("");
   $("#size").innerHTML=OPT.sizes.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join("");
@@ -196,6 +242,8 @@ $("#run").onclick=async()=>{
   const fd=new FormData();
   fd.append("image",file); fd.append("prompt",$("#prompt").value.trim()); fd.append("size",$("#size").value);
   checked("model").forEach(m=>fd.append("models",m)); checked("qual").forEach(q=>fd.append("qualities",q));
+  checked("tmodel").forEach(t=>fd.append("text_models",t)); checked("effort").forEach(x=>fd.append("efforts",x));
+  fd.append("direct",$("input[name=direct]").checked?"true":"false");
   try{
     const {folder}=await api("/api/compare",{method:"POST",body:fd});
     $("#result").classList.remove("hide"); $("#result").scrollIntoView({behavior:"smooth"});
@@ -215,19 +263,39 @@ function poll(folder){
   };
   tick();
 }
+function statusChip(st,err){
+  if(st==="done")return '<span class="chip">done</span>';
+  if(st==="running")return '<span class="chip run">working...</span>';
+  if(st==="error"||st==="skipped")return '<span class="chip bad">'+(st==="skipped"?"skipped":"failed")+'</span>';
+  return '<span class="chip">waiting</span>';
+}
 function renderJob(j){
   const [w,h]=(j.size||"1024x1024").split("x").map(Number);
   const f=encodeURIComponent(j.folder);
-  let html=`<figure class="in"><img src="${esc(j.input_url)}" alt="Input"><figcaption><b>Original (input)</b>${esc(j.prompt||"")}</figcaption></figure>`;
-  for(const it of j.items){
-    if(it.status==="done"&&it.url) html+=`<figure><img src="${esc(it.url)}" alt=""><figcaption><b>${esc(it.label)}</b>${inr(it.cost_inr)}</figcaption></figure>`;
-    else if(it.status==="error") html+=`<figure><div class="ph err" style="aspect-ratio:${w}/${h}">Failed: ${esc(it.error)}</div><figcaption><b>${esc(it.label)}</b></figcaption></figure>`;
-    else html+=`<figure><div class="ph" style="aspect-ratio:${w}/${h}"><div class="spin"></div>${it.status==="running"?"Generating...":"Waiting..."}</div><figcaption><b>${esc(it.label)}</b></figcaption></figure>`;
+  let html=`<div class="top"><figure class="in"><img src="${esc(j.input_url)}" alt="Input"><figcaption><b>Original (input)</b></figcaption></figure>
+    <div class="ptxt"><b>Your prompt</b><pre>${esc(j.prompt||"")}</pre></div></div>`;
+  for(const b of j.branches){
+    const isText=b.kind==="text";
+    let head=isText
+      ?`<div class="bh"><span class="t">${esc(b.text_model)}</span><span class="chip">effort: ${esc(b.effort)}</span>${statusChip(b.status)}${b.text_cost_inr!=null?`<span class="chip">analysis ${inr(b.text_cost_inr)}</span>`:""}</div>`
+      :`<div class="bh"><span class="t">Direct</span><span class="chip">your prompt, no text model</span>${statusChip(b.status)}</div>`;
+    let box="";
+    if(isText&&b.status==="running"&&!b.final_prompt) box+='<div class="box"><div class="hint" style="padding:6px 0"><span class="spin" style="display:inline-block;vertical-align:middle;margin-right:8px;width:16px;height:16px"></span>The text model is analysing the photo...</div></div>';
+    if(b.analysis) box+=`<div class="box"><details open><summary>Analysis by ${esc(b.text_model)} (${esc(b.effort)})</summary><pre>${esc(b.analysis)}</pre></details></div>`;
+    if(b.final_prompt) box+=`<div class="box prompt"><details ${isText?"open":""}><summary>${isText?"Prompt it wrote for the image model":"Prompt sent to the image model"}</summary><pre>${esc(b.final_prompt)}</pre></details></div>`;
+    if(b.error) box+=`<div class="err" style="padding:4px 0">${esc(b.error)}</div>`;
+    let cards="";
+    for(const it of b.items){
+      if(it.status==="done"&&it.url) cards+=`<figure><img src="${esc(it.url)}" alt=""><figcaption><b>${esc(it.label)}</b>${inr(it.cost_inr)}</figcaption></figure>`;
+      else if(it.status==="error"||it.status==="skipped") cards+=`<figure><div class="ph err" style="aspect-ratio:${w}/${h}">${it.status==="skipped"?"Skipped":"Failed"}: ${esc(it.error)}</div><figcaption><b>${esc(it.label)}</b></figcaption></figure>`;
+      else cards+=`<figure><div class="ph" style="aspect-ratio:${w}/${h}"><div class="spin"></div>${it.status==="running"?"Generating...":"Waiting..."}</div><figcaption><b>${esc(it.label)}</b></figcaption></figure>`;
+    }
+    html+=`<div class="branch">${head}${box}<div class="arrow">&#8595; image model(s)</div><div class="grid">${cards}</div></div>`;
   }
-  $("#rgrid").innerHTML=html;
+  $("#rbody").innerHTML=html;
   const running=j.state==="running";
   $("#bar").innerHTML=running
-    ?`<span class="tot">Generating ${j.done}/${j.total}... (you can switch tabs; it keeps running)</span>`
+    ?`<span class="tot">Working: ${j.done}/${j.total} steps done... (you can switch tabs; it keeps running)</span>`
     :`<span class="tot">Done · total cost ${inr(j.total_inr)}</span>
       <a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Open comparison page</a>
       <a class="ghost" href="/api/runs/${f}/zip">Download zip</a>
@@ -261,8 +329,8 @@ async function loadHistory(){
 async function loadLog(){
   try{
     const j=await api("/api/costlog");
-    $("#logtot").textContent=`Total spent: ${inr(j.total_inr)} across ${j.count} charges`;
-    const cols=[["time","Time"],["model","Model"],["quality","Quality"],["size","Size"],["cost_inr","Cost (₹)"],["cost_source","Source"],["running_total_inr","Running total (₹)"],["note","Note"]];
+    $("#logtot").textContent=`Analysis ${inr(j.analysis_inr)} · Images ${inr(j.images_inr)} · Total ${inr(j.total_inr)} (${j.count} charges)`;
+    const cols=[["time","Time"],["step","Step"],["model","Model"],["quality","Quality"],["size","Size"],["cost_inr","Cost (₹)"],["cost_source","Source"],["running_total_inr","Running total (₹)"],["note","Note"]];
     $("#logtable").innerHTML="<tr>"+cols.map(([k,l])=>`<th class="${/inr/.test(k)?"n":""}">${l}</th>`).join("")+"</tr>"+
       j.rows.map(r=>"<tr>"+cols.map(([k])=>`<td class="${/inr/.test(k)?"n":""}">${esc(/inr/.test(k)?Number(r[k]).toFixed(2):r[k])}</td>`).join("")+"</tr>").join("");
   }catch(e){$("#logtot").textContent=e.message}

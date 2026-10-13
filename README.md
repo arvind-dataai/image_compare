@@ -170,3 +170,24 @@ uvicorn main:app --host 0.0.0.0 --port 8000
   (set the proxy read timeout to 300 s), or only allow trusted IPs.
 - A run keeps going in the background, so a long run does not time out the browser.
 - `outputs/` and `cost_log.csv` live on the server's disk. Back them up or attach a volume if you need them long term.
+
+### Text-model analysis step (optional)
+
+Before the image model runs, the page can send your photo and prompt to a text model first.
+The text model writes an analysis and a detailed image prompt, and that prompt goes to the image model:
+
+```
+image + prompt -> text model + effort -> analysis + written prompt -> image model + quality -> image
+```
+
+- Tick any of `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-luna` and any effort levels (`none` works with Luna only).
+  Every text model x effort is its own branch, and each branch's prompt is sent to every image model x quality you tick.
+- "Direct" sends your own prompt as it is (plus the standard preservation rules), so you can compare it with
+  the AI-written prompts. If no text model is ticked, the page works as before.
+- Images in one run = branches x image models x qualities. The cap is 15 (`WEB_MAX_IMAGES` in `.env`).
+- The text model follows the instructions in `optimizer_prompt.txt`. Edit that file to change what it does,
+  then restart the app.
+- The comparison page shows the input, your prompt, and for each branch the model's analysis, the prompt it wrote,
+  and its images, followed by a cost table with every text and image step.
+- If a text step fails, its images are skipped and the other branches carry on. A text call that ran but gave
+  an unreadable reply is still charged, and it shows in the cost log.
