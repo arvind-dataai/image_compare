@@ -126,7 +126,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </section>
 
 <!-- ============ HISTORY ============ -->
-<section id="tab-hist" class="hide"><div id="runs"></div></section>
+<section id="tab-hist" class="hide">
+ <div class="card"><div class="bar"><span class="tot">All runs in one Excel sheet (input, prompt, analysis, written prompt, output, costs)</span>
+  <a class="ghost" href="/export.xlsx">Excel with pictures</a>
+  <a class="ghost" href="/export.xlsx?pictures=0">Excel, links only (small)</a></div></div>
+ <div id="runs"></div></section>
 
 <!-- ============ COST LOG ============ -->
 <section id="tab-log" class="hide">
@@ -299,6 +303,7 @@ function renderJob(j){
     :`<span class="tot">Done · total cost ${inr(j.total_inr)}</span>
       <a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Open comparison page</a>
       <a class="ghost" href="/api/runs/${f}/zip">Download zip</a>
+      <a class="ghost" href="/export.xlsx?run=${f}">Download Excel</a>
       <button class="ghost" id="copy">Copy link</button>`;
   const c=$("#copy"); if(c)c.onclick=async()=>{
     const url=location.origin+`/outputs/${f}/comparison.html`;

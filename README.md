@@ -191,3 +191,13 @@ image + prompt -> text model + effort -> analysis + written prompt -> image mode
   and its images, followed by a cost table with every text and image step.
 - If a text step fails, its images are skipped and the other branches carry on. A text call that ran but gave
   an unreadable reply is still charged, and it shows in the cost log.
+
+
+## Excel export
+
+`/export.xlsx` gives one sheet row per generated image: run, date, input image, your prompt, text model, effort,
+the analysis, the prompt the text model wrote, image model, quality, size, output image, link, status and costs
+(analysis cost on the first row of each branch, image cost on every row, totals at the bottom). Extra sheets: Runs, Cost log.
+`?run=<folder>` for one run, `?pictures=0` for a small links-only file. Links use the address you opened the page on
+(or set `PUBLIC_URL=https://your-domain` in `.env`). Needs `xlsxwriter` (in requirements.txt).
+All of this data already lives on the server in `outputs/<run>/` (input image, output images, `run.json`, `comparison.html`).

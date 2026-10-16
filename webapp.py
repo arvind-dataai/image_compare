@@ -32,7 +32,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -405,6 +405,201 @@ def run_zip(folder: str):
                 z.write(f, f"{folder}/{f.name}")
     return Response(buf.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{folder}.zip"'})
+
+
+# ---------------------------------------------------------------- Excel export
+def _png_size(path: Path):
+    """(width, height) of a PNG/JPEG without Pillow; None if unknown."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                import struct
+                return struct.unpack(">II", head[16:24])
+            if head[:2] == b"\xff\xd8":                       # JPEG: walk the segments
+                import struct
+                f.seek(2)
+                while True:
+                    b = f.read(1)
+                    while b and b != b"\xff":
+                        b = f.read(1)
+                    m = f.read(1)
+                    while m == b"\xff":
+                        m = f.read(1)
+                    if not m:
+                        return None
+                    if m[0] in (0xC0, 0xC1, 0xC2):
+                        f.read(3)
+                        h, w = struct.unpack(">HH", f.read(4))
+                        return w, h
+                    ln = struct.unpack(">H", f.read(2))[0]
+                    f.seek(ln - 2, 1)
+    except Exception:
+        return None
+    return None
+
+
+def _public_base(request) -> str:
+    env = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+    if env:
+        return env
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    proto = request.headers.get("x-forwarded-proto") or ("http" if host.startswith(("127.", "localhost")) else "https")
+    return f"{proto}://{host}" if host else ""
+
+
+def _export_rows(folder_names: list) -> tuple[list, list]:
+    """One row per output image (or per failed image). Returns (rows, run_summaries)."""
+    rows, runs_ = [], []
+    for name in folder_names:
+        d = _run_json(name)
+        if not d:
+            continue
+        meta = d.get("meta", {})
+        base = {"folder": name, "time": d.get("time", ""), "prompt": meta.get("Prompt", ""),
+                "input": d.get("input"), "size": meta.get("Size", "")}
+        branches = d.get("branches")
+        if not branches:
+            branches = [{"kind": "direct", "label": "Direct: your prompt, no text model", "final_prompt": "",
+                         "items": d.get("items", [])}]
+        n_img = 0
+        for b in branches:
+            text_cost = b.get("text_cost_inr")
+            first = True
+            items = b.get("items") or [{"label": "", "file": None, "error": b.get("error")}]
+            for it in items:
+                n_img += 1 if it.get("file") else 0
+                rows.append({**base,
+                             "branch": b.get("label", ""),
+                             "text_model": b.get("text_model") or "(none, direct)",
+                             "effort": b.get("effort") or "",
+                             "analysis": b.get("analysis") or "",
+                             "final_prompt": b.get("final_prompt") or "",
+                             "image_model": it.get("model") or meta.get("Model", ""),
+                             "quality": it.get("quality") or meta.get("Quality", ""),
+                             "file": it.get("file"),
+                             "label": it.get("label", ""),
+                             "status": "ok" if it.get("file") else (it.get("error") or b.get("error") or it.get("status") or "not generated"),
+                             "text_cost": text_cost if (first and text_cost is not None) else None,
+                             "image_cost": it.get("cost_inr")})
+                first = False
+        runs_.append({"folder": name, "time": d.get("time", ""), "prompt": meta.get("Prompt", ""),
+                      "branches": len(branches), "images": n_img, "total": d.get("total_inr", 0)})
+    return rows, runs_
+
+
+@router.get("/export.xlsx")
+def export_xlsx(request: Request, run: str = "", pictures: int = 1):
+    """Excel file: one row per generated image with input image, your prompt, analysis, the prompt the
+    text model wrote, the output image and costs. ?run=<folder> for one run; ?pictures=0 for links only."""
+    import xlsxwriter
+    if run:
+        _check_folder(run)
+        names = [run]
+    else:
+        names = sorted((p.name for p in core.OUTPUT_DIR.iterdir()
+                        if p.is_dir() and re.match(r"^\d+_", p.name)),
+                       key=lambda n: int(n.split("_", 1)[0]))
+    rows, runs_ = _export_rows(names)
+    base = _public_base(request)
+    buf = io.BytesIO()
+    wb = xlsxwriter.Workbook(buf, {"in_memory": True})
+    hdr = wb.add_format({"bold": True, "bg_color": "#1f2a44", "font_color": "#ffffff", "valign": "vcenter", "text_wrap": True})
+    wrap = wb.add_format({"text_wrap": True, "valign": "top"})
+    top = wb.add_format({"valign": "top"})
+    money = wb.add_format({"num_format": "\u20b9#,##0.00", "valign": "top"})
+    link = wb.add_format({"font_color": "#0563c1", "underline": 1, "valign": "top"})
+    bold = wb.add_format({"bold": True, "num_format": "\u20b9#,##0.00"})
+
+    def cap(t):
+        t = str(t or "")
+        return t if len(t) <= 32000 else t[:32000] + " ...[cut]"
+
+    ws = wb.add_worksheet("Images")
+    cols = [("Run", 22), ("Date", 17), ("Input image", 24), ("Your prompt (initial)", 40), ("Text model", 14),
+            ("Effort", 8), ("Analysis (by text model)", 60), ("Prompt written for the image model", 60),
+            ("Image model", 22), ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14),
+            ("Status", 18), ("Analysis cost (\u20b9)", 13), ("Image cost (\u20b9)", 13)]
+    for i, (t, w) in enumerate(cols):
+        ws.write(0, i, t, hdr)
+        ws.set_column(i, i, w)
+    ws.set_row(0, 32)
+    ws.freeze_panes(1, 2)
+    ROW_PX = 190
+    def put_image(r, c, path):
+        sz = _png_size(path)
+        if not sz:
+            return False
+        w, h = sz
+        sc = min(ROW_PX / h, 170 / w)
+        ws.insert_image(r, c, str(path), {"x_scale": sc, "y_scale": sc, "x_offset": 3, "y_offset": 3, "object_position": 1})
+        return True
+
+    for n, r in enumerate(rows, start=1):
+        ws.write(n, 0, r["folder"], top)
+        ws.write(n, 1, r["time"], top)
+        in_path = core.OUTPUT_DIR / r["folder"] / (r["input"] or "")
+        ws.set_row(n, ROW_PX * 0.75 + 6 if pictures else 90)
+        if pictures and r["input"] and in_path.is_file():
+            if not put_image(n, 2, in_path):
+                ws.write(n, 2, r["input"], top)
+        elif r["input"] and base:
+            ws.write_url(n, 2, f"{base}/outputs/{r['folder']}/{r['input']}", link, "open input")
+        ws.write(n, 3, cap(r["prompt"]), wrap)
+        ws.write(n, 4, r["text_model"], top)
+        ws.write(n, 5, r["effort"], top)
+        ws.write(n, 6, cap(r["analysis"]), wrap)
+        ws.write(n, 7, cap(r["final_prompt"]), wrap)
+        ws.write(n, 8, r["image_model"], top)
+        ws.write(n, 9, r["quality"], top)
+        ws.write(n, 10, r["size"], top)
+        out_path = core.OUTPUT_DIR / r["folder"] / (r["file"] or "")
+        if r["file"] and out_path.is_file():
+            if pictures:
+                put_image(n, 11, out_path)
+            if base:
+                ws.write_url(n, 12, f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
+        ws.write(n, 13, r["status"], wrap)
+        if r["text_cost"] is not None:
+            ws.write_number(n, 14, round(r["text_cost"], 4), money)
+        if r["image_cost"] is not None:
+            ws.write_number(n, 15, round(r["image_cost"], 4), money)
+    if rows:
+        ws.autofilter(0, 0, len(rows), len(cols) - 1)
+        tr = len(rows) + 2
+        ws.write(tr, 13, "Totals", bold)
+        ws.write_formula(tr, 14, f"=SUM(O2:O{len(rows) + 1})", bold)
+        ws.write_formula(tr, 15, f"=SUM(P2:P{len(rows) + 1})", bold)
+
+    sm = wb.add_worksheet("Runs")
+    for i, (t, w) in enumerate([("Run", 24), ("Date", 18), ("Your prompt", 70), ("Branches", 10), ("Images", 9), ("Run cost (\u20b9)", 14)]):
+        sm.write(0, i, t, hdr)
+        sm.set_column(i, i, w)
+    for n, r in enumerate(runs_, start=1):
+        sm.write(n, 0, r["folder"])
+        sm.write(n, 1, r["time"])
+        sm.write(n, 2, cap(r["prompt"]), wrap)
+        sm.write(n, 3, r["branches"])
+        sm.write(n, 4, r["images"])
+        sm.write_number(n, 5, round(float(r["total"] or 0), 2), money)
+    if not run:
+        cl = wb.add_worksheet("Cost log")
+        crow = _cost_rows()
+        for i, f in enumerate(LOG_FIELDS):
+            cl.write(0, i, f, hdr)
+            cl.set_column(i, i, 16)
+        for n, rr in enumerate(crow, start=1):
+            for i, f in enumerate(LOG_FIELDS):
+                v = rr.get(f, "")
+                try:
+                    v = float(v) if f in ("cost_inr", "running_total_inr", "usd_to_inr", "input_tokens", "output_tokens") else v
+                except ValueError:
+                    pass
+                cl.write(n, i, v)
+    wb.close()
+    fname = f"{run or 'all_runs'}.xlsx"
+    return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @router.get("/api/costlog")
