@@ -75,6 +75,26 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .top .ptxt{padding:2px 4px}.top .ptxt pre{white-space:pre-wrap;margin:4px 0;font-size:14px;line-height:1.5;font-family:inherit}
 .sub{font-size:13px;color:var(--mute);margin:10px 0 4px}
 .opt.off{opacity:.45}
+.rvbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.rvbar label{display:flex;gap:6px;align-items:center;font-size:14px}
+.rvbar input[type=text],.rvbar input:not([type]),.rvbar select{width:auto;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.rvbar .tot{margin-left:auto;color:var(--mute);font-size:14px}
+.rv{display:grid;grid-template-columns:230px 230px 1fr;gap:16px}
+@media (max-width:900px){.rv{grid-template-columns:1fr 1fr}.rv .info{grid-column:1/-1}}
+@media (max-width:520px){.rv{grid-template-columns:1fr}}
+.rv figure img{width:100%;display:block;cursor:zoom-in}.rv figcaption{font-size:12px;color:var(--mute);padding:4px 8px}
+.rv .info h3{margin:0 0 2px;font-size:14px}.rv .info .sm{font-size:12.5px;color:var(--mute);margin-bottom:6px}
+.rv details{border:1px solid var(--line);border-radius:8px;padding:4px 10px;margin:0 0 6px;background:var(--bg)}
+.rv summary{cursor:pointer;font-size:13px;font-weight:600}
+.rv pre{white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0;max-height:240px;overflow:auto}
+.qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px 14px;margin-top:8px}
+.qrow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;border-bottom:1px dashed var(--line);padding:3px 0}
+.yn{display:flex;gap:4px;flex:none}
+.yn button{border:1px solid var(--line);background:none;color:var(--ink);font:inherit;font-size:13px;border-radius:6px;padding:2px 12px;cursor:pointer}
+.yn button.on.y{background:var(--ok);color:#fff;border-color:var(--ok)}
+.yn button.on.n{background:var(--err);color:#fff;border-color:var(--err)}
+.rv textarea{margin-top:8px;min-height:44px}
+.saved{font-size:12px;color:var(--ok);height:14px}
 .hide{display:none}
 </style>
 </head>
@@ -84,6 +104,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 <nav>
   <button data-tab="new" class="on">New run</button>
   <button data-tab="hist">History</button>
+  <button data-tab="review">Review</button>
   <button data-tab="log">Cost log</button>
 </nav>
 
@@ -126,11 +147,26 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </section>
 
 <!-- ============ HISTORY ============ -->
-<section id="tab-hist" class="hide">
- <div class="card"><div class="bar"><span class="tot">All runs in one Excel sheet (input, prompt, analysis, written prompt, output, costs)</span>
-  <a class="ghost" href="/export.xlsx">Excel with pictures</a>
-  <a class="ghost" href="/export.xlsx?pictures=0">Excel, links only (small)</a></div></div>
- <div id="runs"></div></section>
+<section id="tab-hist" class="hide"><div id="runs"></div></section>
+
+<!-- ============ REVIEW ============ -->
+<section id="tab-review" class="hide">
+ <div class="card">
+  <div class="rvbar">
+   <label>Your name <input id="rvname" placeholder="e.g. Govind" maxlength="60"></label>
+   <label>Run <select id="rvrun"><option value="">All runs</option></select></label>
+   <label class="chk"><input type="checkbox" id="rvtodo"> Only not reviewed by me</label>
+   <span class="tot" id="rvprog"></span>
+  </div>
+  <div class="rvbar" style="margin-top:10px">
+   <a class="ghost" id="rvx1" href="/review.xlsx">Download Excel (with pictures)</a>
+   <a class="ghost" id="rvx2" href="/review.xlsx?pictures=0">Excel, links only (small)</a>
+   <label class="chk"><input type="checkbox" id="rvonly"> Excel: reviewed images only</label>
+  </div>
+  <p class="hint">Click Yes or No for each question (click again to clear). Answers save by themselves under your name; several people can review the same image. The Excel has one row per image per reviewer.</p>
+ </div>
+ <div id="rvlist"></div>
+</section>
 
 <!-- ============ COST LOG ============ -->
 <section id="tab-log" class="hide">
@@ -159,8 +195,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","hist","log"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="hist")loadHistory(); if(b.dataset.tab==="log")loadLog();
+  ["new","hist","review","log"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="hist")loadHistory(); if(b.dataset.tab==="review")loadReview(); if(b.dataset.tab==="log")loadLog();
 });
 
 /* ---------- lightbox ---------- */
@@ -303,7 +339,6 @@ function renderJob(j){
     :`<span class="tot">Done · total cost ${inr(j.total_inr)}</span>
       <a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Open comparison page</a>
       <a class="ghost" href="/api/runs/${f}/zip">Download zip</a>
-      <a class="ghost" href="/export.xlsx?run=${f}">Download Excel</a>
       <button class="ghost" id="copy">Copy link</button>`;
   const c=$("#copy"); if(c)c.onclick=async()=>{
     const url=location.origin+`/outputs/${f}/comparison.html`;
@@ -329,6 +364,68 @@ async function loadHistory(){
         <div class="links"><a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Open comparison page</a><a class="ghost" href="/api/runs/${f}/zip">Download zip</a></div></div>`;    }).join("");
   }catch(e){box.innerHTML=`<div class="card err">${esc(e.message)}</div>`}
 }
+
+/* ---------- review ---------- */
+let RV={fields:[],items:[]};
+try{$("#rvname").value=localStorage.getItem("rvname")||""}catch(e){}
+function rvname(){return $("#rvname").value.trim()}
+$("#rvname").onchange=()=>{try{localStorage.setItem("rvname",rvname())}catch(e){} loadReview()};
+$("#rvrun").onchange=loadReview; $("#rvtodo").onchange=loadReview;
+function rvLinks(){
+  const run=$("#rvrun").value, q=[];
+  if(run)q.push("run="+encodeURIComponent(run));
+  if($("#rvonly").checked)q.push("reviewed_only=1");
+  $("#rvx1").href="/review.xlsx"+(q.length?"?"+q.join("&"):"");
+  $("#rvx2").href="/review.xlsx?"+q.concat("pictures=0").join("&");
+}
+$("#rvonly").onchange=rvLinks;
+async function loadReview(){
+  const box=$("#rvlist"); rvLinks();
+  try{
+    const run=$("#rvrun").value;
+    const j=await api("/api/review/items?reviewer="+encodeURIComponent(rvname())+(run?"&run="+encodeURIComponent(run):"")+($("#rvtodo").checked?"&only=todo":""));
+    RV=j;
+    const sel=$("#rvrun"), cur=sel.value;
+    sel.innerHTML='<option value="">All runs</option>'+j.runs.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("");
+    sel.value=cur; rvLinks();
+    const done=j.items.filter(it=>j.fields.some(f=>it.mine[f.key])).length;
+    $("#rvprog").textContent=rvname()?`${j.items.length} images shown · ${done} reviewed by you`:`${j.items.length} images · type your name to start`;
+    if(!j.items.length){box.innerHTML='<div class="card hint">Nothing to review here yet.</div>';return}
+    box.innerHTML=j.items.map((it,i)=>{
+      const m=it.mine||{}, who=it.text_model&&!/none/.test(it.text_model)?`${esc(it.text_model)} · ${esc(it.effort||"")}`:"Direct (no text model)";
+      return `<div class="card rv" data-i="${i}">
+        <figure><img src="${esc(it.input_url||"")}" alt="input" loading="lazy"><figcaption>Input image</figcaption></figure>
+        <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · ${esc(it.image_model)} · ${esc(it.quality)}</figcaption></figure>
+        <div class="info">
+          <h3>${esc(it.folder)}</h3><div class="sm">${esc(it.time)} · ${who}${it.reviewers?` · ${it.reviewers} reviewer(s) so far`:""}</div>
+          <details><summary>Initial prompt</summary><pre>${esc(it.prompt)}</pre></details>
+          ${it.analysis?`<details><summary>Analysis by the text model</summary><pre>${esc(it.analysis)}</pre></details>`:""}
+          <details><summary>Prompt given to the image model</summary><pre>${esc(it.final_prompt||"(the initial prompt plus the standard rules)")}</pre></details>
+          <div class="qs">${j.fields.map(f=>`<div class="qrow"><span>${esc(f.label)}</span><span class="yn" data-k="${f.key}">
+            <button class="y ${m[f.key]==="yes"?"on":""}" data-v="yes">Yes</button><button class="n ${m[f.key]==="no"?"on":""}" data-v="no">No</button></span></div>`).join("")}</div>
+          <textarea placeholder="Any other feedback (optional)" data-comment>${esc(m.comment||"")}</textarea>
+          <div class="saved"></div>
+        </div></div>`}).join("");
+  }catch(e){box.innerHTML=`<div class="card err">${esc(e.message)}</div>`}
+}
+async function rvSave(card,payload){
+  const it=RV.items[+card.dataset.i], note=card.querySelector(".saved");
+  if(!rvname()){note.style.color="var(--err)";note.textContent="Type your name at the top first.";return false}
+  try{
+    const r=await api("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({folder:it.folder,file:it.file,reviewer:rvname(),...payload})});
+    Object.assign(it.mine,r.saved); note.style.color="var(--ok)";note.textContent="Saved";return true;
+  }catch(e){note.style.color="var(--err)";note.textContent=e.message;return false}
+}
+$("#rvlist").addEventListener("click",async e=>{
+  const b=e.target.closest(".yn button"); if(!b)return;
+  const card=b.closest(".rv"), k=b.parentElement.dataset.k, it=RV.items[+card.dataset.i];
+  const v=b.classList.contains("on")?"":b.dataset.v;
+  if(await rvSave(card,{answers:{[k]:v}})){b.parentElement.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v===v&&v!==""))}
+});
+$("#rvlist").addEventListener("change",e=>{
+  const t=e.target.closest("[data-comment]"); if(t)rvSave(t.closest(".rv"),{comment:t.value});
+});
 
 /* ---------- cost log ---------- */
 async function loadLog(){

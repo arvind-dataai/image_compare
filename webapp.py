@@ -24,6 +24,7 @@ import base64
 import csv
 import io
 import json
+from datetime import datetime
 import os
 import re
 import secrets
@@ -488,44 +489,141 @@ def _export_rows(folder_names: list) -> tuple[list, list]:
     return rows, runs_
 
 
-@router.get("/export.xlsx")
-def export_xlsx(request: Request, run: str = "", pictures: int = 1):
-    """Excel file: one row per generated image with input image, your prompt, analysis, the prompt the
-    text model wrote, the output image and costs. ?run=<folder> for one run; ?pictures=0 for links only."""
+# ---------------------------------------------------------------- reviews (feedback sheet)
+REVIEW_FILE = Path(core.COST_LOG).parent / "reviews.json"
+_REVIEW_LOCK = threading.Lock()
+REVIEW_FIELDS = [
+    ("satisfied", "Satisfied with the output"),
+    ("object_ok", "Correct object identification"),
+    ("separation_ok", "Correct image separation"),
+    ("background_ok", "Happy with the background"),
+    ("product_unchanged", "Product unchanged"),
+    ("lighting_natural", "Lighting and shadows look natural"),
+    ("usable_as_ad", "Usable as an ad without edits"),
+]
+_REVIEW_KEYS = [k for k, _ in REVIEW_FIELDS]
+
+
+def _load_reviews() -> dict:
+    try:
+        return json.loads(REVIEW_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _review_key(folder: str, file: str, reviewer: str) -> str:
+    return f"{folder}|{file}|{reviewer}"
+
+
+@router.get("/api/review/items")
+def review_items(run: str = "", reviewer: str = "", only: str = ""):
+    """One entry per generated image, with the reviewer's own answers. only=todo -> not yet reviewed by this reviewer."""
+    names = [run] if run else sorted((p.name for p in core.OUTPUT_DIR.iterdir()
+                                      if p.is_dir() and re.match(r"^\d+_", p.name)),
+                                     key=lambda n: -int(n.split("_", 1)[0]))
+    if run:
+        _check_folder(run)
+    rows, _ = _export_rows(names)
+    reviews = _load_reviews()
+    items, runs_seen = [], []
+    for r in rows:
+        if not r["file"]:
+            continue
+        mine = reviews.get(_review_key(r["folder"], r["file"], reviewer)) if reviewer else None
+        n_rev = sum(1 for k in reviews if k.startswith(f"{r['folder']}|{r['file']}|"))
+        if only == "todo" and mine and any(mine.get(k) for k in _REVIEW_KEYS):
+            continue
+        if r["folder"] not in runs_seen:
+            runs_seen.append(r["folder"])
+        items.append({"folder": r["folder"], "time": r["time"], "prompt": r["prompt"], "size": r["size"],
+                      "input_url": f"/outputs/{r['folder']}/{r['input']}" if r["input"] else None,
+                      "text_model": r["text_model"], "effort": r["effort"], "analysis": r["analysis"],
+                      "final_prompt": r["final_prompt"], "image_model": r["image_model"], "quality": r["quality"],
+                      "file": r["file"], "url": f"/outputs/{r['folder']}/{r['file']}",
+                      "mine": mine or {}, "reviewers": n_rev})
+    all_runs = sorted((p.name for p in core.OUTPUT_DIR.iterdir() if p.is_dir() and re.match(r"^\d+_", p.name)),
+                      key=lambda n: -int(n.split("_", 1)[0]))
+    return {"fields": [{"key": k, "label": l} for k, l in REVIEW_FIELDS], "items": items, "runs": all_runs}
+
+
+@router.post("/api/review")
+async def save_review(payload: dict):
+    """Save/merge one reviewer's answers for one image: {folder, file, reviewer, answers:{key: yes|no|""}, comment}."""
+    folder = str(payload.get("folder", ""))
+    file = str(payload.get("file", ""))
+    reviewer = str(payload.get("reviewer", "")).strip()[:60]
+    if not reviewer:
+        raise HTTPException(400, "Please type your name first.")
+    _check_folder(folder)
+    if not re.match(r"^[\w.\-+]+\.(png|jpg|jpeg|webp)$", file, re.I) or not (core.OUTPUT_DIR / folder / file).is_file():
+        raise HTTPException(404, "Image not found.")
+    answers = payload.get("answers") or {}
+    with _REVIEW_LOCK:
+        data = _load_reviews()
+        rec = data.get(_review_key(folder, file, reviewer), {})
+        for k, v in answers.items():
+            if k in _REVIEW_KEYS and v in ("yes", "no", ""):
+                rec[k] = v
+        if "comment" in payload:
+            rec["comment"] = str(payload.get("comment", ""))[:2000]
+        rec["reviewer"] = reviewer
+        rec["folder"], rec["file"] = folder, file
+        rec["updated"] = datetime.now().strftime("%d %b %Y, %H:%M")
+        data[_review_key(folder, file, reviewer)] = rec
+        tmp = REVIEW_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(REVIEW_FILE)
+    return {"ok": True, "saved": rec}
+
+
+@router.get("/review.xlsx")
+def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_only: int = 0):
+    """Excel: one row per image per reviewer (images nobody reviewed get one blank-answer row unless reviewed_only=1)."""
     import xlsxwriter
     if run:
         _check_folder(run)
-        names = [run]
-    else:
-        names = sorted((p.name for p in core.OUTPUT_DIR.iterdir()
-                        if p.is_dir() and re.match(r"^\d+_", p.name)),
-                       key=lambda n: int(n.split("_", 1)[0]))
-    rows, runs_ = _export_rows(names)
+    names = [run] if run else sorted((p.name for p in core.OUTPUT_DIR.iterdir()
+                                      if p.is_dir() and re.match(r"^\d+_", p.name)),
+                                     key=lambda n: int(n.split("_", 1)[0]))
+    rows, _ = _export_rows(names)
+    reviews = _load_reviews()
     base = _public_base(request)
+    out = []                                   # (image row, review dict or {})
+    for r in rows:
+        if not r["file"]:
+            continue
+        recs = [v for k, v in reviews.items() if k.startswith(f"{r['folder']}|{r['file']}|")]
+        if recs:
+            out += [(r, v) for v in sorted(recs, key=lambda v: v.get("reviewer", ""))]
+        elif not reviewed_only:
+            out.append((r, {}))
+
     buf = io.BytesIO()
     wb = xlsxwriter.Workbook(buf, {"in_memory": True})
     hdr = wb.add_format({"bold": True, "bg_color": "#1f2a44", "font_color": "#ffffff", "valign": "vcenter", "text_wrap": True})
     wrap = wb.add_format({"text_wrap": True, "valign": "top"})
     top = wb.add_format({"valign": "top"})
-    money = wb.add_format({"num_format": "\u20b9#,##0.00", "valign": "top"})
+    mid = wb.add_format({"valign": "top", "align": "center"})
     link = wb.add_format({"font_color": "#0563c1", "underline": 1, "valign": "top"})
-    bold = wb.add_format({"bold": True, "num_format": "\u20b9#,##0.00"})
+    green = wb.add_format({"valign": "top", "align": "center", "bg_color": "#d9f2e3", "bold": True})
+    red = wb.add_format({"valign": "top", "align": "center", "bg_color": "#f9d9d6", "bold": True})
 
     def cap(t):
         t = str(t or "")
         return t if len(t) <= 32000 else t[:32000] + " ...[cut]"
 
-    ws = wb.add_worksheet("Images")
-    cols = [("Run", 22), ("Date", 17), ("Input image", 24), ("Your prompt (initial)", 40), ("Text model", 14),
-            ("Effort", 8), ("Analysis (by text model)", 60), ("Prompt written for the image model", 60),
-            ("Image model", 22), ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14),
-            ("Status", 18), ("Analysis cost (\u20b9)", 13), ("Image cost (\u20b9)", 13)]
+    ws = wb.add_worksheet("Review")
+    cols = [("Run id", 22), ("Date", 17), ("Input image", 24), ("Initial prompt", 40), ("Text model", 14), ("Effort", 8),
+            ("Analysis (by text model)", 60), ("Prompt given to the image model", 60), ("Image model", 22),
+            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14), ("Reviewer", 14)]
+    cols += [(l, 15) for _, l in REVIEW_FIELDS] + [("Comment", 40), ("Reviewed at", 17)]
     for i, (t, w) in enumerate(cols):
         ws.write(0, i, t, hdr)
         ws.set_column(i, i, w)
-    ws.set_row(0, 32)
-    ws.freeze_panes(1, 2)
+    ws.set_row(0, 46)
+    ws.freeze_panes(1, 1)
     ROW_PX = 190
+
     def put_image(r, c, path):
         sz = _png_size(path)
         if not sz:
@@ -535,11 +633,11 @@ def export_xlsx(request: Request, run: str = "", pictures: int = 1):
         ws.insert_image(r, c, str(path), {"x_scale": sc, "y_scale": sc, "x_offset": 3, "y_offset": 3, "object_position": 1})
         return True
 
-    for n, r in enumerate(rows, start=1):
+    for n, (r, rv) in enumerate(out, start=1):
+        ws.set_row(n, ROW_PX * 0.75 + 6 if pictures else 90)
         ws.write(n, 0, r["folder"], top)
         ws.write(n, 1, r["time"], top)
         in_path = core.OUTPUT_DIR / r["folder"] / (r["input"] or "")
-        ws.set_row(n, ROW_PX * 0.75 + 6 if pictures else 90)
         if pictures and r["input"] and in_path.is_file():
             if not put_image(n, 2, in_path):
                 ws.write(n, 2, r["input"], top)
@@ -553,51 +651,38 @@ def export_xlsx(request: Request, run: str = "", pictures: int = 1):
         ws.write(n, 8, r["image_model"], top)
         ws.write(n, 9, r["quality"], top)
         ws.write(n, 10, r["size"], top)
-        out_path = core.OUTPUT_DIR / r["folder"] / (r["file"] or "")
-        if r["file"] and out_path.is_file():
+        out_path = core.OUTPUT_DIR / r["folder"] / r["file"]
+        if out_path.is_file():
             if pictures:
                 put_image(n, 11, out_path)
             if base:
                 ws.write_url(n, 12, f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
-        ws.write(n, 13, r["status"], wrap)
-        if r["text_cost"] is not None:
-            ws.write_number(n, 14, round(r["text_cost"], 4), money)
-        if r["image_cost"] is not None:
-            ws.write_number(n, 15, round(r["image_cost"], 4), money)
-    if rows:
-        ws.autofilter(0, 0, len(rows), len(cols) - 1)
-        tr = len(rows) + 2
-        ws.write(tr, 13, "Totals", bold)
-        ws.write_formula(tr, 14, f"=SUM(O2:O{len(rows) + 1})", bold)
-        ws.write_formula(tr, 15, f"=SUM(P2:P{len(rows) + 1})", bold)
+        ws.write(n, 13, rv.get("reviewer", ""), top)
+        for j, (k, _) in enumerate(REVIEW_FIELDS):
+            v = rv.get(k, "")
+            ws.write(n, 14 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
+        ws.write(n, 14 + len(REVIEW_FIELDS), cap(rv.get("comment", "")), wrap)
+        ws.write(n, 15 + len(REVIEW_FIELDS), rv.get("updated", ""), top)
+    if out:
+        ws.autofilter(0, 0, len(out), len(cols) - 1)
 
-    sm = wb.add_worksheet("Runs")
-    for i, (t, w) in enumerate([("Run", 24), ("Date", 18), ("Your prompt", 70), ("Branches", 10), ("Images", 9), ("Run cost (\u20b9)", 14)]):
+    sm = wb.add_worksheet("Summary")                    # Yes / No counts per question
+    for i, t in enumerate(["Question", "Yes", "No", "Not answered", "% Yes (of answered)"]):
         sm.write(0, i, t, hdr)
-        sm.set_column(i, i, w)
-    for n, r in enumerate(runs_, start=1):
-        sm.write(n, 0, r["folder"])
-        sm.write(n, 1, r["time"])
-        sm.write(n, 2, cap(r["prompt"]), wrap)
-        sm.write(n, 3, r["branches"])
-        sm.write(n, 4, r["images"])
-        sm.write_number(n, 5, round(float(r["total"] or 0), 2), money)
-    if not run:
-        cl = wb.add_worksheet("Cost log")
-        crow = _cost_rows()
-        for i, f in enumerate(LOG_FIELDS):
-            cl.write(0, i, f, hdr)
-            cl.set_column(i, i, 16)
-        for n, rr in enumerate(crow, start=1):
-            for i, f in enumerate(LOG_FIELDS):
-                v = rr.get(f, "")
-                try:
-                    v = float(v) if f in ("cost_inr", "running_total_inr", "usd_to_inr", "input_tokens", "output_tokens") else v
-                except ValueError:
-                    pass
-                cl.write(n, i, v)
+    sm.set_column(0, 0, 40)
+    sm.set_column(1, 4, 16)
+    pct = wb.add_format({"num_format": "0%"})
+    last = len(out) + 1
+    for j, (k, label) in enumerate(REVIEW_FIELDS):
+        col = chr(ord("O") + j)                         # O.. = first answer column
+        r_ = j + 1
+        sm.write(r_, 0, label)
+        sm.write_formula(r_, 1, f'=COUNTIF(Review!{col}2:{col}{last},"Yes")')
+        sm.write_formula(r_, 2, f'=COUNTIF(Review!{col}2:{col}{last},"No")')
+        sm.write_formula(r_, 3, f'={max(len(out), 0)}-B{r_ + 1}-C{r_ + 1}')
+        sm.write_formula(r_, 4, f'=IF(B{r_ + 1}+C{r_ + 1}=0,"",B{r_ + 1}/(B{r_ + 1}+C{r_ + 1}))', pct)
     wb.close()
-    fname = f"{run or 'all_runs'}.xlsx"
+    fname = f"review_{run or 'all_runs'}.xlsx"
     return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 

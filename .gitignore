@@ -8,3 +8,4 @@ comparisons/
 cost_log*.csv
 *.zip
 .DS_Store
+reviews*.json

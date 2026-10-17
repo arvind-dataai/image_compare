@@ -193,11 +193,16 @@ image + prompt -> text model + effort -> analysis + written prompt -> image mode
   an unreadable reply is still charged, and it shows in the cost log.
 
 
-## Excel export
+## Review tab and Excel
 
-`/export.xlsx` gives one sheet row per generated image: run, date, input image, your prompt, text model, effort,
-the analysis, the prompt the text model wrote, image model, quality, size, output image, link, status and costs
-(analysis cost on the first row of each branch, image cost on every row, totals at the bottom). Extra sheets: Runs, Cost log.
-`?run=<folder>` for one run, `?pictures=0` for a small links-only file. Links use the address you opened the page on
-(or set `PUBLIC_URL=https://your-domain` in `.env`). Needs `xlsxwriter` (in requirements.txt).
-All of this data already lives on the server in `outputs/<run>/` (input image, output images, `run.json`, `comparison.html`).
+The **Review** tab shows one card per generated image: run id, date, input image, initial prompt, text model and effort
+(or Direct), the analysis, the prompt given to the image model, and the output image. The reviewer types a name once,
+then clicks Yes / No (click again to clear) for: satisfied with the output, correct object identification, correct image
+separation, happy with the background, product unchanged, lighting and shadows look natural, usable as an ad without edits,
+plus an optional comment. Answers save immediately into `reviews.json` (next to `cost_log.csv`, not in git).
+Several people can review the same image; each gets their own row.
+
+`/review.xlsx` downloads it all: one row per image per reviewer, with pictures (or `?pictures=0` for links only),
+`?run=<folder>` for one run, `?reviewed_only=1` to skip images nobody reviewed, plus a Summary sheet with Yes/No counts.
+Links in the sheet use the address you opened the site on (or set `PUBLIC_URL=https://your-domain` in `.env`).
+Needs `xlsxwriter` (in requirements.txt).
