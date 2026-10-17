@@ -94,7 +94,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .yn button.on.y{background:var(--ok);color:#fff;border-color:var(--ok)}
 .yn button.on.n{background:var(--err);color:#fff;border-color:var(--err)}
 .rv textarea{margin-top:8px;min-height:44px}
-.saved{font-size:12px;color:var(--ok);height:14px}
+.saved{font-size:13px;min-height:18px}
+.rvact{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 10px;margin-left:8px;vertical-align:middle}
+.tag.ok{background:var(--ok);color:#fff}.tag.todo{background:none;border:1px solid var(--line);color:var(--mute);font-weight:600}
+.rv.locked .yn button{pointer-events:none}.rv.locked .yn button:not(.on){opacity:.35}.rv.locked textarea{opacity:.8}
 .hide{display:none}
 </style>
 </head>
@@ -117,9 +121,9 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     <div class="opts" id="tmodels"></div>
     <div class="sub">Effort: how hard the text model thinks (a model runs once per effort you tick)</div>
     <div class="opts" id="efforts"></div>
-    <h2 style="margin-top:16px">2. Image models <span class="hint">(pick one or both)</span></h2>
+    <h2 style="margin-top:16px">2. Image models <span class="hint">(pick any)</span></h2>
     <div class="opts" id="models"></div>
-    <h2 style="margin-top:16px">3. Quality <span class="hint">(pick one or more)</span></h2>
+    <h2 style="margin-top:16px">3. Quality <span class="hint">(pick one or more; for Nano Banana: low = 1K, medium = 2K, high = 4K)</span></h2>
     <div class="opts" id="quals"></div>
     <h2 style="margin-top:16px">4. Size</h2>
     <select id="size"></select>
@@ -153,9 +157,8 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 <section id="tab-review" class="hide">
  <div class="card">
   <div class="rvbar">
-   <label>Your name <input id="rvname" placeholder="e.g. Govind" maxlength="60"></label>
    <label>Run <select id="rvrun"><option value="">All runs</option></select></label>
-   <label class="chk"><input type="checkbox" id="rvtodo"> Only not reviewed by me</label>
+   <label>Show <select id="rvstatus"><option value="">All images</option><option value="todo">Not reviewed yet</option><option value="done">Already reviewed</option></select></label>
    <span class="tot" id="rvprog"></span>
   </div>
   <div class="rvbar" style="margin-top:10px">
@@ -163,7 +166,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
    <a class="ghost" id="rvx2" href="/review.xlsx?pictures=0">Excel, links only (small)</a>
    <label class="chk"><input type="checkbox" id="rvonly"> Excel: reviewed images only</label>
   </div>
-  <p class="hint">Click Yes or No for each question (click again to clear). Answers save by themselves under your name; several people can review the same image. The Excel has one row per image per reviewer.</p>
+  <p class="hint">Answer the questions, then press <b>Save review</b>. A saved review shows a green "Reviewed" tag; press <b>Edit review</b> to change it.</p>
  </div>
  <div id="rvlist"></div>
 </section>
@@ -222,7 +225,8 @@ function update(){
   const direct=$("input[name=direct]").checked || !p.length;
   const branches=p.length+(direct?1:0), per=m.length*q.length, n=branches*per;
   const [w,h]=$("#size").value.split("x").map(Number), px=w*h/1048576;
-  const imgEst=branches*m.length*q.reduce((a,x)=>a+(OPT.est_inr_1024[x]||0),0)*px;
+  const imgEst=branches*m.reduce((a0,id)=>{const mo=OPT.models.find(y=>y.id===id);
+    return a0+q.reduce((a,x)=>a+(mo&&mo.fixed?(mo.est_inr[x]||0):(OPT.est_inr_1024[x]||0)*px),0)},0);
   const txtEst=p.reduce((a,[t,x])=>a+textCost(t,x),0);
   // grey out efforts no ticked model supports
   $$("#efforts .opt").forEach(l=>{const x=l.querySelector("input").value;
@@ -251,7 +255,7 @@ async function init(){
   $("#tmodels").innerHTML=`<label class="opt"><input type="checkbox" name="direct" checked><div><b>Direct</b><span>Send my prompt as it is, no text model</span></div></label>`
     +OPT.text_models.map(t=>`<label class="opt"><input type="checkbox" name="tmodel" value="${esc(t.id)}"><div><b>${esc(t.id)}</b><span>${esc(t.label)}</span></div></label>`).join("");
   $("#efforts").innerHTML=OPT.efforts.map((x,i)=>`<label class="opt q"><input type="checkbox" name="effort" value="${x}" ${x==="low"?"checked":""}><div><b>${x}</b></div></label>`).join("");
-  $("#models").innerHTML=OPT.models.map((m,i)=>`<label class="opt"><input type="checkbox" name="model" value="${esc(m.id)}" ${i===0?"checked":""}><div><b>${esc(m.id.replace("gpt-image-",""))}</b><span>${esc(m.label)}</span></div></label>`).join("");
+  $("#models").innerHTML=OPT.models.map((m,i)=>`<label class="opt ${m.available?"":"off"}"><input type="checkbox" name="model" value="${esc(m.id)}" ${i===0?"checked":""} ${m.available?"":"disabled"}><div><b>${esc(m.id.replace("gpt-image-","").replace("gemini-",""))}</b><span>${esc(m.label)}${m.available?"":" · not available: add "+esc(m.needs)}</span></div></label>`).join("");
   $("#quals").innerHTML=OPT.qualities.map((q,i)=>`<label class="opt q"><input type="checkbox" name="qual" value="${q}" ${i===0?"checked":""}><div><b>${q}</b></div></label>`).join("");
   $("#size").innerHTML=OPT.sizes.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join("");
   document.addEventListener("change",update); $("#prompt").oninput=update;
@@ -367,10 +371,7 @@ async function loadHistory(){
 
 /* ---------- review ---------- */
 let RV={fields:[],items:[]};
-try{$("#rvname").value=localStorage.getItem("rvname")||""}catch(e){}
-function rvname(){return $("#rvname").value.trim()}
-$("#rvname").onchange=()=>{try{localStorage.setItem("rvname",rvname())}catch(e){} loadReview()};
-$("#rvrun").onchange=loadReview; $("#rvtodo").onchange=loadReview;
+$("#rvrun").onchange=loadReview; $("#rvstatus").onchange=loadReview;
 function rvLinks(){
   const run=$("#rvrun").value, q=[];
   if(run)q.push("run="+encodeURIComponent(run));
@@ -379,52 +380,83 @@ function rvLinks(){
   $("#rvx2").href="/review.xlsx?"+q.concat("pictures=0").join("&");
 }
 $("#rvonly").onchange=rvLinks;
-async function loadReview(){
+function rvCard(it,i){
+  const f=RV.fields, m=it.review||{}, saved=it.reviewed;
+  const who=it.text_model&&!/none/.test(it.text_model)?`${esc(it.text_model)} · ${esc(it.effort||"")}`:"Direct (no text model)";
+  return `<div class="card rv ${saved?"locked":""}" data-i="${i}">
+    <figure><img src="${esc(it.input_url||"")}" alt="input" loading="lazy"><figcaption>Input image</figcaption></figure>
+    <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · ${esc(it.image_model)} · ${esc(it.quality)}</figcaption></figure>
+    <div class="info">
+      <h3>${esc(it.folder)}<span class="tag ${saved?"ok":"todo"}">${saved?"✓ Reviewed":"Not reviewed"}</span></h3>
+      <div class="sm">${esc(it.time)} · ${who}${saved&&m.updated?` · saved ${esc(m.updated)}`:""}</div>
+      <details><summary>Initial prompt</summary><pre>${esc(it.prompt)}</pre></details>
+      ${it.analysis?`<details><summary>Analysis by the text model</summary><pre>${esc(it.analysis)}</pre></details>`:""}
+      <details><summary>Prompt given to the image model</summary><pre>${esc(it.final_prompt||"(the initial prompt plus the standard rules)")}</pre></details>
+      <div class="qs">${f.map(x=>`<div class="qrow"><span>${esc(x.label)}</span><span class="yn" data-k="${x.key}">
+        <button class="y ${m[x.key]==="yes"?"on":""}" data-v="yes">Yes</button><button class="n ${m[x.key]==="no"?"on":""}" data-v="no">No</button></span></div>`).join("")}</div>
+      <textarea placeholder="Any other feedback (optional)" data-comment ${saved?"readonly":""}>${esc(m.comment||"")}</textarea>
+      <div class="rvact">
+        <button class="primary" data-act="save" ${saved?'style="display:none"':""}>Save review</button>
+        <button class="ghost" data-act="cancel" style="display:none">Cancel</button>
+        <button class="ghost" data-act="edit" ${saved?"":'style="display:none"'}>Edit review</button>
+        <span class="saved"></span>
+      </div></div></div>`;
+}
+async function loadReview(keepScroll){
   const box=$("#rvlist"); rvLinks();
   try{
-    const run=$("#rvrun").value;
-    const j=await api("/api/review/items?reviewer="+encodeURIComponent(rvname())+(run?"&run="+encodeURIComponent(run):"")+($("#rvtodo").checked?"&only=todo":""));
+    const run=$("#rvrun").value, st=$("#rvstatus").value;
+    const j=await api("/api/review/items?"+[run&&"run="+encodeURIComponent(run),st&&"status="+st].filter(Boolean).join("&"));
     RV=j;
     const sel=$("#rvrun"), cur=sel.value;
     sel.innerHTML='<option value="">All runs</option>'+j.runs.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("");
     sel.value=cur; rvLinks();
-    const done=j.items.filter(it=>j.fields.some(f=>it.mine[f.key])).length;
-    $("#rvprog").textContent=rvname()?`${j.items.length} images shown · ${done} reviewed by you`:`${j.items.length} images · type your name to start`;
-    if(!j.items.length){box.innerHTML='<div class="card hint">Nothing to review here yet.</div>';return}
-    box.innerHTML=j.items.map((it,i)=>{
-      const m=it.mine||{}, who=it.text_model&&!/none/.test(it.text_model)?`${esc(it.text_model)} · ${esc(it.effort||"")}`:"Direct (no text model)";
-      return `<div class="card rv" data-i="${i}">
-        <figure><img src="${esc(it.input_url||"")}" alt="input" loading="lazy"><figcaption>Input image</figcaption></figure>
-        <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · ${esc(it.image_model)} · ${esc(it.quality)}</figcaption></figure>
-        <div class="info">
-          <h3>${esc(it.folder)}</h3><div class="sm">${esc(it.time)} · ${who}${it.reviewers?` · ${it.reviewers} reviewer(s) so far`:""}</div>
-          <details><summary>Initial prompt</summary><pre>${esc(it.prompt)}</pre></details>
-          ${it.analysis?`<details><summary>Analysis by the text model</summary><pre>${esc(it.analysis)}</pre></details>`:""}
-          <details><summary>Prompt given to the image model</summary><pre>${esc(it.final_prompt||"(the initial prompt plus the standard rules)")}</pre></details>
-          <div class="qs">${j.fields.map(f=>`<div class="qrow"><span>${esc(f.label)}</span><span class="yn" data-k="${f.key}">
-            <button class="y ${m[f.key]==="yes"?"on":""}" data-v="yes">Yes</button><button class="n ${m[f.key]==="no"?"on":""}" data-v="no">No</button></span></div>`).join("")}</div>
-          <textarea placeholder="Any other feedback (optional)" data-comment>${esc(m.comment||"")}</textarea>
-          <div class="saved"></div>
-        </div></div>`}).join("");
+    $("#rvprog").textContent=`${j.reviewed_count} of ${j.total} images reviewed`;
+    box.innerHTML=j.items.length?j.items.map(rvCard).join(""):'<div class="card hint">Nothing to show here.</div>';
   }catch(e){box.innerHTML=`<div class="card err">${esc(e.message)}</div>`}
 }
-async function rvSave(card,payload){
-  const it=RV.items[+card.dataset.i], note=card.querySelector(".saved");
-  if(!rvname()){note.style.color="var(--err)";note.textContent="Type your name at the top first.";return false}
-  try{
-    const r=await api("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({folder:it.folder,file:it.file,reviewer:rvname(),...payload})});
-    Object.assign(it.mine,r.saved); note.style.color="var(--ok)";note.textContent="Saved";return true;
-  }catch(e){note.style.color="var(--err)";note.textContent=e.message;return false}
+function rvRead(card){
+  const answers={}; card.querySelectorAll(".yn").forEach(y=>{const on=y.querySelector("button.on"); answers[y.dataset.k]=on?on.dataset.v:""});
+  return {answers,comment:card.querySelector("[data-comment]").value};
+}
+function rvMsg(card,text,good){const n=card.querySelector(".saved");n.style.color=good?"var(--ok)":"var(--err)";n.textContent=text}
+function rvLock(card,locked){
+  card.classList.toggle("locked",locked);
+  card.querySelector("[data-comment]").readOnly=locked;
+  card.querySelector('[data-act="save"]').style.display=locked?"none":"";
+  card.querySelector('[data-act="edit"]').style.display=locked?"":"none";
+  card.querySelector('[data-act="cancel"]').style.display="none";
+}
+function rvApply(card,m){
+  card.querySelectorAll(".yn").forEach(y=>y.querySelectorAll("button").forEach(b=>b.classList.toggle("on",m[y.dataset.k]===b.dataset.v)));
+  card.querySelector("[data-comment]").value=m.comment||"";
 }
 $("#rvlist").addEventListener("click",async e=>{
-  const b=e.target.closest(".yn button"); if(!b)return;
-  const card=b.closest(".rv"), k=b.parentElement.dataset.k, it=RV.items[+card.dataset.i];
-  const v=b.classList.contains("on")?"":b.dataset.v;
-  if(await rvSave(card,{answers:{[k]:v}})){b.parentElement.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v===v&&v!==""))}
-});
-$("#rvlist").addEventListener("change",e=>{
-  const t=e.target.closest("[data-comment]"); if(t)rvSave(t.closest(".rv"),{comment:t.value});
+  const card=e.target.closest(".rv"); if(!card)return;
+  const it=RV.items[+card.dataset.i];
+  const yb=e.target.closest(".yn button");
+  if(yb){ if(card.classList.contains("locked"))return;
+    const on=yb.classList.contains("on"); yb.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    if(!on)yb.classList.add("on"); rvMsg(card,"Not saved yet: press Save review",false); return; }
+  const act=e.target.closest("[data-act]"); if(!act)return;
+  if(act.dataset.act==="edit"){ rvLock(card,false);
+    card.querySelector('[data-act="cancel"]').style.display=""; card.querySelector('[data-act="save"]').textContent="Save changes";
+    rvMsg(card,"Editing: press Save changes when done",false); }
+  else if(act.dataset.act==="cancel"){ rvApply(card,it.review||{}); rvLock(card,true); card.querySelector('[data-act="save"]').textContent="Save review"; rvMsg(card,"",true); }
+  else if(act.dataset.act==="save"){
+    act.disabled=true; rvMsg(card,"Saving...",true);
+    try{
+      const r=await api("/api/review",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({folder:it.folder,file:it.file,...rvRead(card)})});
+      it.review=r.saved; it.reviewed=true;
+      act.textContent="Save review"; rvLock(card,false); rvLock(card,true);
+      const tag=card.querySelector(".tag"); tag.className="tag ok"; tag.textContent="✓ Reviewed";
+      card.querySelector(".sm").textContent=card.querySelector(".sm").textContent.replace(/ · saved .*$/,"")+" · saved "+r.saved.updated;
+      rvMsg(card,"Saved ✓",true);
+      const j=await api("/api/review/items"); $("#rvprog").textContent=`${j.reviewed_count} of ${j.total} images reviewed`;
+    }catch(err){rvMsg(card,"Not saved: "+err.message,false)}
+    finally{act.disabled=false}
+  }
 });
 
 /* ---------- cost log ---------- */

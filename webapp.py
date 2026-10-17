@@ -38,8 +38,8 @@ from fastapi.responses import HTMLResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import main as core
-from costing import (ESTIMATE_1024, LOG_FIELDS, TEXT_RATES_PER_M, USD_TO_INR, _as_dict, log_text_cost,
-                     total_so_far)
+from costing import (ESTIMATE_1024, LOG_FIELDS, NANO_MODELS, TEXT_RATES_PER_M, USD_TO_INR, _as_dict, estimate_inr,
+                     log_text_cost, total_so_far)
 from prompts import build_custom_prompt
 from runs import new_run_dir, short_model, write_flow_comparison
 
@@ -49,6 +49,7 @@ router = APIRouter()
 WEB_MODELS = {
     "gpt-image-2.5-flare": "Flare: fast, good for everyday edits",
     "gpt-image-2.5-sunburst": "Sunburst: most capable, precise edits",
+    "gemini-nano-banana-2.1": "Nano Banana 2.1 (Google): low = 1K, medium = 2K, high = 4K",
 }
 WEB_QUALITIES = ["low", "medium", "high"]
 SIZES = {
@@ -247,7 +248,11 @@ def page():
 @router.get("/api/options")
 def options():
     return {
-        "models": [{"id": k, "label": v} for k, v in WEB_MODELS.items()],
+        "models": [{"id": k, "label": v, "available": core.gemini_ready() if k in NANO_MODELS else True,
+                    "needs": "GEMINI_API_KEY in the server's .env" if k in NANO_MODELS else "",
+                    # rupees per image for each quality; fixed=True means the price does not depend on the size picked
+                    "est_inr": {q: round(estimate_inr(q, k), 2) for q in WEB_QUALITIES},
+                    "fixed": k in NANO_MODELS} for k, v in WEB_MODELS.items()],
         "qualities": WEB_QUALITIES,
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
         "text_models": [{"id": k, "label": v["label"], "efforts": v["efforts"],
@@ -283,6 +288,8 @@ async def compare(
     qualities = [q for q in WEB_QUALITIES if q in qualities]
     if not models or not qualities:
         raise HTTPException(400, "Select at least one image model and one quality.")
+    if any(m in NANO_MODELS for m in models) and not core.gemini_ready():
+        raise HTTPException(400, "Nano Banana needs GEMINI_API_KEY in the server's .env file.")
     text_models = [t for t in TEXT_MODELS if t in text_models]
     efforts = [x for x in EFFORTS if x in efforts]
     if text_models and not efforts:
@@ -313,7 +320,9 @@ async def compare(
         b["items"] = [{"label": f"{short_model(m)} \u00b7 {q}", "model": m, "quality": q, "status": "queued"}
                       for m in models for q in qualities]
 
-    mpart = "gpt2.5" + "+".join(short_model(m).replace("gpt2.5", "") for m in models)
+    gpt = [short_model(m).replace("gpt2.5", "") for m in models if m.startswith("gpt-image-2.5")]
+    other = [short_model(m) for m in models if not m.startswith("gpt-image-2.5")]
+    mpart = "+".join(([("gpt2.5" + "+".join(gpt))] if gpt else []) + other)
     if not only_direct:
         slugs = (["direct"] if use_direct else []) + list(dict.fromkeys(TEXT_MODELS[t]["slug"] for t, _ in plans))
         mpart = "+".join(slugs) + "__" + mpart
@@ -511,65 +520,69 @@ def _load_reviews() -> dict:
         return {}
 
 
-def _review_key(folder: str, file: str, reviewer: str) -> str:
-    return f"{folder}|{file}|{reviewer}"
+def _review_key(folder: str, file: str) -> str:
+    return f"{folder}|{file}"
+
+
+def _latest(data: dict, folder: str, file: str) -> dict:
+    """The review for one image. One person reviews, but if old multi-name records exist the newest wins."""
+    recs = [v for k, v in data.items() if k.startswith(f"{folder}|{file}")]
+    return max(recs, key=lambda v: v.get("updated_ts", 0)) if recs else {}
+
+
+def _is_reviewed(rec: dict) -> bool:
+    return bool(rec) and (any(rec.get(k) for k in _REVIEW_KEYS) or bool(rec.get("comment")))
 
 
 @router.get("/api/review/items")
-def review_items(run: str = "", reviewer: str = "", only: str = ""):
-    """One entry per generated image, with the reviewer's own answers. only=todo -> not yet reviewed by this reviewer."""
-    names = [run] if run else sorted((p.name for p in core.OUTPUT_DIR.iterdir()
-                                      if p.is_dir() and re.match(r"^\d+_", p.name)),
-                                     key=lambda n: -int(n.split("_", 1)[0]))
+def review_items(run: str = "", status: str = ""):
+    """One entry per generated image with its saved review. status: todo (not reviewed) | done (reviewed)."""
     if run:
         _check_folder(run)
-    rows, _ = _export_rows(names)
+    all_runs = sorted((p.name for p in core.OUTPUT_DIR.iterdir() if p.is_dir() and re.match(r"^\d+_", p.name)),
+                      key=lambda n: -int(n.split("_", 1)[0]))
+    rows, _ = _export_rows([run] if run else all_runs)
     reviews = _load_reviews()
-    items, runs_seen = [], []
+    items, done = [], 0
     for r in rows:
         if not r["file"]:
             continue
-        mine = reviews.get(_review_key(r["folder"], r["file"], reviewer)) if reviewer else None
-        n_rev = sum(1 for k in reviews if k.startswith(f"{r['folder']}|{r['file']}|"))
-        if only == "todo" and mine and any(mine.get(k) for k in _REVIEW_KEYS):
+        rec = _latest(reviews, r["folder"], r["file"])
+        reviewed = _is_reviewed(rec)
+        done += reviewed
+        if (status == "todo" and reviewed) or (status == "done" and not reviewed):
             continue
-        if r["folder"] not in runs_seen:
-            runs_seen.append(r["folder"])
         items.append({"folder": r["folder"], "time": r["time"], "prompt": r["prompt"], "size": r["size"],
                       "input_url": f"/outputs/{r['folder']}/{r['input']}" if r["input"] else None,
                       "text_model": r["text_model"], "effort": r["effort"], "analysis": r["analysis"],
                       "final_prompt": r["final_prompt"], "image_model": r["image_model"], "quality": r["quality"],
                       "file": r["file"], "url": f"/outputs/{r['folder']}/{r['file']}",
-                      "mine": mine or {}, "reviewers": n_rev})
-    all_runs = sorted((p.name for p in core.OUTPUT_DIR.iterdir() if p.is_dir() and re.match(r"^\d+_", p.name)),
-                      key=lambda n: -int(n.split("_", 1)[0]))
-    return {"fields": [{"key": k, "label": l} for k, l in REVIEW_FIELDS], "items": items, "runs": all_runs}
+                      "review": rec if reviewed else {}, "reviewed": reviewed})
+    total = sum(1 for r in rows if r["file"])
+    return {"fields": [{"key": k, "label": l} for k, l in REVIEW_FIELDS], "items": items, "runs": all_runs,
+            "total": total, "reviewed_count": done}
 
 
 @router.post("/api/review")
 async def save_review(payload: dict):
-    """Save/merge one reviewer's answers for one image: {folder, file, reviewer, answers:{key: yes|no|""}, comment}."""
+    """Save (replace) the review of one image: {folder, file, answers:{key: yes|no|""}, comment}."""
     folder = str(payload.get("folder", ""))
     file = str(payload.get("file", ""))
-    reviewer = str(payload.get("reviewer", "")).strip()[:60]
-    if not reviewer:
-        raise HTTPException(400, "Please type your name first.")
     _check_folder(folder)
     if not re.match(r"^[\w.\-+]+\.(png|jpg|jpeg|webp)$", file, re.I) or not (core.OUTPUT_DIR / folder / file).is_file():
         raise HTTPException(404, "Image not found.")
     answers = payload.get("answers") or {}
+    rec = {k: (answers.get(k) if answers.get(k) in ("yes", "no") else "") for k in _REVIEW_KEYS}
+    rec["comment"] = str(payload.get("comment", "")).strip()[:2000]
+    if not _is_reviewed(rec):
+        raise HTTPException(400, "Answer at least one question (or write a comment) before saving.")
+    now = datetime.now()
+    rec.update({"folder": folder, "file": file, "updated": now.strftime("%d %b %Y, %H:%M"), "updated_ts": now.timestamp()})
     with _REVIEW_LOCK:
         data = _load_reviews()
-        rec = data.get(_review_key(folder, file, reviewer), {})
-        for k, v in answers.items():
-            if k in _REVIEW_KEYS and v in ("yes", "no", ""):
-                rec[k] = v
-        if "comment" in payload:
-            rec["comment"] = str(payload.get("comment", ""))[:2000]
-        rec["reviewer"] = reviewer
-        rec["folder"], rec["file"] = folder, file
-        rec["updated"] = datetime.now().strftime("%d %b %Y, %H:%M")
-        data[_review_key(folder, file, reviewer)] = rec
+        for k in [k for k in data if k.startswith(f"{folder}|{file}")]:      # replace any older record
+            del data[k]
+        data[_review_key(folder, file)] = rec
         tmp = REVIEW_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(REVIEW_FILE)
@@ -578,7 +591,7 @@ async def save_review(payload: dict):
 
 @router.get("/review.xlsx")
 def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_only: int = 0):
-    """Excel: one row per image per reviewer (images nobody reviewed get one blank-answer row unless reviewed_only=1)."""
+    """Excel: one row per image with its review (images not reviewed yet have blank answers unless reviewed_only=1)."""
     import xlsxwriter
     if run:
         _check_folder(run)
@@ -592,9 +605,9 @@ def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_onl
     for r in rows:
         if not r["file"]:
             continue
-        recs = [v for k, v in reviews.items() if k.startswith(f"{r['folder']}|{r['file']}|")]
-        if recs:
-            out += [(r, v) for v in sorted(recs, key=lambda v: v.get("reviewer", ""))]
+        rec = _latest(reviews, r["folder"], r["file"])
+        if _is_reviewed(rec):
+            out.append((r, rec))
         elif not reviewed_only:
             out.append((r, {}))
 
@@ -615,7 +628,7 @@ def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_onl
     ws = wb.add_worksheet("Review")
     cols = [("Run id", 22), ("Date", 17), ("Input image", 24), ("Initial prompt", 40), ("Text model", 14), ("Effort", 8),
             ("Analysis (by text model)", 60), ("Prompt given to the image model", 60), ("Image model", 22),
-            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14), ("Reviewer", 14)]
+            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14)]
     cols += [(l, 15) for _, l in REVIEW_FIELDS] + [("Comment", 40), ("Reviewed at", 17)]
     for i, (t, w) in enumerate(cols):
         ws.write(0, i, t, hdr)
@@ -657,12 +670,11 @@ def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_onl
                 put_image(n, 11, out_path)
             if base:
                 ws.write_url(n, 12, f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
-        ws.write(n, 13, rv.get("reviewer", ""), top)
         for j, (k, _) in enumerate(REVIEW_FIELDS):
             v = rv.get(k, "")
-            ws.write(n, 14 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
-        ws.write(n, 14 + len(REVIEW_FIELDS), cap(rv.get("comment", "")), wrap)
-        ws.write(n, 15 + len(REVIEW_FIELDS), rv.get("updated", ""), top)
+            ws.write(n, 13 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
+        ws.write(n, 13 + len(REVIEW_FIELDS), cap(rv.get("comment", "")), wrap)
+        ws.write(n, 14 + len(REVIEW_FIELDS), rv.get("updated", ""), top)
     if out:
         ws.autofilter(0, 0, len(out), len(cols) - 1)
 
@@ -674,7 +686,7 @@ def review_xlsx(request: Request, run: str = "", pictures: int = 1, reviewed_onl
     pct = wb.add_format({"num_format": "0%"})
     last = len(out) + 1
     for j, (k, label) in enumerate(REVIEW_FIELDS):
-        col = chr(ord("O") + j)                         # O.. = first answer column
+        col = chr(ord("N") + j)                         # N.. = first answer column
         r_ = j + 1
         sm.write(r_, 0, label)
         sm.write_formula(r_, 1, f'=COUNTIF(Review!{col}2:{col}{last},"Yes")')

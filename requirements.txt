@@ -4,3 +4,4 @@ openai
 python-dotenv
 python-multipart
 xlsxwriter
+google-genai>=2.3.0

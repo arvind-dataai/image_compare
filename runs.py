@@ -23,8 +23,8 @@ _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".web
 
 
 def short_model(model: str) -> str:
-    """gpt-image-2.5-flare -> gpt2.5flare"""
-    return model.replace("gpt-image-", "gpt").replace("-", "")
+    """gpt-image-2.5-flare -> gpt2.5flare ; gemini-nano-banana-2.1 -> nanobanana2.1"""
+    return model.replace("gpt-image-", "gpt").replace("gemini-", "").replace("-", "")
 
 
 def ext_for(mime: str) -> str:

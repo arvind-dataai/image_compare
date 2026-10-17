@@ -1,5 +1,6 @@
 import base64
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
@@ -11,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI, OpenAIError
 from starlette.concurrency import run_in_threadpool
 
-from costing import USD_TO_INR, _as_dict, compute_cost, log_cost, log_text_cost, total_so_far
+from costing import (NANO_MODELS, NANO_SIZE_FOR_QUALITY, USD_TO_INR, _as_dict, compute_cost, log_cost, log_text_cost,
+                     total_so_far)
 from runs import ext_for, new_run_dir, write_comparison
 from prompts import (
     MASTER_PROMPT, MASTER_STAGE_NOTE, STYLES, build_custom_prompt,
@@ -100,8 +102,71 @@ async def _read_image(file: UploadFile) -> tuple[str, bytes, str]:
     return (file.filename or "input.png", data, file.content_type)
 
 
+_NANO_RATIOS = [(1, 1), (2, 3), (3, 2), (3, 4), (4, 3), (4, 5), (5, 4), (9, 16), (16, 9), (21, 9)]
+_gemini = None
+_gemini_lock = threading.Lock()
+try:                                   # load Google's library once at start-up: importing it from several
+    from google import genai as _genai  # worker threads at the same time gives a "circular import" error
+except Exception:                      # not installed yet: only Nano Banana is unavailable
+    _genai = None
+
+
+def gemini_ready() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+
+
+def _gemini_client():
+    global _gemini
+    with _gemini_lock:
+        if _gemini is None:
+            if not gemini_ready():
+                raise HTTPException(400, "Nano Banana needs GEMINI_API_KEY in the server's .env file.")
+            if _genai is None:
+                raise HTTPException(500, "Google's library is not installed: run pip install -r requirements.txt on the server and restart.")
+            _gemini = _genai.Client(api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+        return _gemini
+
+
+def _aspect_for(size: str) -> str:
+    """'1088x1360' -> '4:5' (the nearest ratio Nano Banana supports)."""
+    w, h = (int(x) for x in size.lower().split("x"))
+    a, b = min(_NANO_RATIOS, key=lambda r: abs(r[0] / r[1] - w / h))
+    return f"{a}:{b}"
+
+
+def _generate_nano(image, prompt: str, size: str, model: str, quality: str):
+    """Nano Banana (Google) edit: input photo + prompt -> image bytes. quality low/medium/high -> 1K/2K/4K."""
+    cfg = {}
+    if os.getenv("NANO_THINKING"):                     # optional: minimal | medium | high
+        cfg["generation_config"] = {"thinking_level": os.getenv("NANO_THINKING")}
+    try:
+        it = _gemini_client().interactions.create(
+            model=model,
+            input=[{"type": "text", "text": prompt},
+                   {"type": "image", "data": base64.b64encode(image[1]).decode("ascii"), "mime_type": image[2] or "image/png"}],
+            response_format={"type": "image", "aspect_ratio": _aspect_for(size),
+                             "image_size": NANO_SIZE_FOR_QUALITY.get(quality, "2K")},
+            **cfg,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Google error: {e}")
+    data = getattr(getattr(it, "output_image", None), "data", None)
+    if not data:
+        why = (getattr(it, "output_text", None) or "").strip()[:200]
+        raise HTTPException(502, "Google returned no image" + (f": {why}" if why else "."))
+    u = getattr(it, "usage", None)
+    usage = {"input_tokens": int(getattr(u, "total_input_tokens", 0) or 0),
+             # thinking tokens are billed at the output rate
+             "output_tokens": int(getattr(u, "total_output_tokens", 0) or 0) + int(getattr(u, "total_thought_tokens", 0) or 0)}
+    return base64.b64decode(data), usage
+
+
 def _generate(image, prompt: str, size: str, model: str, quality: str):
     """Call the image model. Returns (png_bytes, usage). Nothing is saved here."""
+    if model in NANO_MODELS:
+        return _generate_nano(image, prompt, size, model, quality)
     try:
         result = client.images.edit(model=model, image=image, prompt=prompt, size=size, quality=quality)
     except OpenAIError as e:
@@ -115,7 +180,7 @@ def _store(run_dir: Path, filename: str, png: bytes, usage, size: str, model: st
     (run_dir / filename).write_bytes(png)
     cost, source, _ = log_cost(COST_LOG, model, quality, size, usage, note=f"{note} | {run_dir.name}/{filename}")
     if ledger is not None:
-        _, _, tin, tout = compute_cost(usage, quality)
+        _, _, tin, tout = compute_cost(usage, quality, model)
         ledger.append({"part": f"Image: {filename}", "model": model, "tokens_in": tin, "tokens_out": tout,
                        "cost_inr": cost, "source": source})
     return cost

@@ -196,13 +196,22 @@ image + prompt -> text model + effort -> analysis + written prompt -> image mode
 ## Review tab and Excel
 
 The **Review** tab shows one card per generated image: run id, date, input image, initial prompt, text model and effort
-(or Direct), the analysis, the prompt given to the image model, and the output image. The reviewer types a name once,
-then clicks Yes / No (click again to clear) for: satisfied with the output, correct object identification, correct image
-separation, happy with the background, product unchanged, lighting and shadows look natural, usable as an ad without edits,
-plus an optional comment. Answers save immediately into `reviews.json` (next to `cost_log.csv`, not in git).
-Several people can review the same image; each gets their own row.
+(or Direct), the analysis, the prompt given to the image model, and the output image. Click Yes / No for: satisfied with
+the output, correct object identification, correct image separation, happy with the background, product unchanged,
+lighting and shadows look natural, usable as an ad without edits, add an optional comment, then press **Save review**.
+Saved cards show a green "Reviewed" tag; **Edit review** unlocks them (Save changes / Cancel). Reviews are stored in
+`reviews.json` next to `cost_log.csv` (not in git). Filter by run, or show only not-yet-reviewed / already-reviewed images.
 
-`/review.xlsx` downloads it all: one row per image per reviewer, with pictures (or `?pictures=0` for links only),
-`?run=<folder>` for one run, `?reviewed_only=1` to skip images nobody reviewed, plus a Summary sheet with Yes/No counts.
+`/review.xlsx` downloads one row per image with pictures (or `?pictures=0` for links only), `?run=<folder>` for one run,
+`?reviewed_only=1` to skip images not reviewed yet, plus a Summary sheet with Yes/No counts.
 Links in the sheet use the address you opened the site on (or set `PUBLIC_URL=https://your-domain` in `.env`).
-Needs `xlsxwriter` (in requirements.txt).
+
+## Nano Banana (Google)
+
+`gemini-nano-banana-2.1` is in the image-model list next to flare and sunburst. It needs a Google key:
+put `GEMINI_API_KEY=...` in `.env` on the server (key from https://aistudio.google.com/apikey, billing on), run
+`pip install -r requirements.txt` (adds `google-genai`) and restart. Without the key the box is greyed out.
+Nano Banana has no low/medium/high quality, so the page maps them to output size: low = 1K, medium = 2K, high = 4K
+(price per image about $0.034 / $0.050 / $0.113). The picture shape follows the size you choose (1088x1360 -> 4:5).
+Cost is computed from the token usage Google returns (input $1.50 and output incl. thinking $30 per 1M tokens).
+Optional `NANO_THINKING=minimal|medium|high`. All Nano Banana images carry Google's SynthID watermark.

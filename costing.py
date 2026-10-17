@@ -41,13 +41,24 @@ ESTIMATE_1024 = {
 _LOG_LOCK = threading.Lock()   # several images/steps can finish at once; keep the running total correct
 
 LOG_FIELDS = [
-    "time", "model", "quality", "size", "input_tokens", "output_tokens",
+    "time", "step", "model", "quality", "size", "input_tokens", "output_tokens",
     "cost_inr", "cost_source", "running_total_inr", "usd_to_inr", "note",
 ]
 
 
-def estimate_inr(quality):
-    """Rough rupee estimate for one 1024x1024 image."""
+# Google Nano Banana (Gemini image) models: USD per 1M tokens, and USD per image by output size
+# (Gemini API pricing page). The app maps quality low/medium/high -> 1K/2K/4K.
+NANO_MODELS = {
+    "gemini-nano-banana-2.1": {"in": 1.50, "out": 30.00, "per_image": {"1K": 0.0336, "2K": 0.0504, "4K": 0.113}},
+}
+NANO_SIZE_FOR_QUALITY = {"low": "1K", "medium": "2K", "high": "4K"}
+
+
+def estimate_inr(quality, model=None):
+    """Rough rupee estimate for one image (1024x1024 for OpenAI models; the tier price for Nano Banana)."""
+    if model in NANO_MODELS:
+        tier = NANO_SIZE_FOR_QUALITY.get(quality, "2K")
+        return NANO_MODELS[model]["per_image"][tier] * USD_TO_INR
     return ESTIMATE_1024.get(quality, ESTIMATE_1024["high"]) * USD_TO_INR
 
 
@@ -62,9 +73,15 @@ def _as_dict(usage):
         return {}
 
 
-def compute_cost(usage, quality="high"):
+def compute_cost(usage, quality="high", model=None):
     """Return (cost_inr, source, input_tokens, output_tokens)."""
     u = _as_dict(usage)
+    if model in NANO_MODELS:                    # usage was normalised by main._generate_nano
+        r = NANO_MODELS[model]
+        in_tok, out_tok = int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0)
+        if in_tok or out_tok:
+            return (in_tok * r["in"] + out_tok * r["out"]) / 1_000_000 * USD_TO_INR, "usage", in_tok, out_tok
+        return estimate_inr(quality, model), "estimate", 0, 0
     in_tok = int(u.get("input_tokens") or 0)
     out_tok = int(u.get("output_tokens") or 0)
     if in_tok or out_tok:
@@ -97,18 +114,32 @@ def total_so_far(log_path):
 
 
 def _archive_old_log(p):
-    """If an older log has different columns (e.g. the USD version), set it aside."""
+    """Older logs lack the 'step' column: add it in place (text rows -> analysis, others -> image).
+    A log with some other layout (e.g. the very old USD version) is set aside."""
     if not p.is_file():
         return
-    with open(p, encoding="utf-8") as f:
-        first = f.readline().strip()
-    if first != ",".join(LOG_FIELDS):
-        p.rename(p.with_name(f"{p.stem}_old_{datetime.now():%Y%m%d%H%M%S}{p.suffix}"))
+    with open(p, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    if not rows or rows[0] == LOG_FIELDS:
+        return
+    header = rows[0]
+    if header == [h for h in LOG_FIELDS if h != "step"]:
+        out = []
+        for r in rows[1:]:
+            d = dict(zip(header, r))
+            d["step"] = "analysis" if d.get("quality") == "text" else "image"
+            out.append(d)
+        with open(p, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
+            w.writeheader()
+            w.writerows(out)
+        return
+    p.rename(p.with_name(f"{p.stem}_old_{datetime.now():%Y%m%d%H%M%S}{p.suffix}"))
 
 
 def log_cost(log_path, model, quality, size, usage, note=""):
     """Append one row to the cost log. Returns (cost_inr, source, running_total_inr)."""
-    cost, source, in_tok, out_tok = compute_cost(usage, quality)
+    cost, source, in_tok, out_tok = compute_cost(usage, quality, model)
     p = Path(log_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with _LOG_LOCK:
@@ -120,7 +151,7 @@ def log_cost(log_path, model, quality, size, usage, note=""):
             if new_file:
                 w.writeheader()
             w.writerow({
-                "time": datetime.now().isoformat(timespec="seconds"),
+                "time": datetime.now().isoformat(timespec="seconds"), "step": "image",
                 "model": model, "quality": quality, "size": size,
                 "input_tokens": in_tok, "output_tokens": out_tok,
                 "cost_inr": f"{cost:.4f}", "cost_source": source,
@@ -158,7 +189,7 @@ def log_text_cost(log_path, model, usage, note=""):
             if new_file:
                 w.writeheader()
             w.writerow({
-                "time": datetime.now().isoformat(timespec="seconds"),
+                "time": datetime.now().isoformat(timespec="seconds"), "step": "analysis",
                 "model": model, "quality": "text", "size": "n/a",
                 "input_tokens": in_tok, "output_tokens": out_tok,
                 "cost_inr": f"{cost:.4f}", "cost_source": source,
