@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import OpenAI, OpenAIError
 from starlette.concurrency import run_in_threadpool
 
-from costing import (NANO_MODELS, NANO_SIZE_FOR_QUALITY, USD_TO_INR, _as_dict, compute_cost, log_cost, log_text_cost,
+from costing import (META_MODELS, NANO_MODELS, NANO_SIZE_FOR_QUALITY, USD_TO_INR, _as_dict, compute_cost, log_cost, log_text_cost,
                      total_so_far)
 from runs import ext_for, new_run_dir, write_comparison
 from prompts import (
@@ -163,10 +163,51 @@ def _generate_nano(image, prompt: str, size: str, model: str, quality: str):
     return base64.b64decode(data), usage
 
 
+_meta = None
+_meta_lock = threading.Lock()
+
+
+def meta_ready() -> bool:
+    return bool(os.getenv("MODEL_API_KEY"))
+
+
+def _meta_client():
+    global _meta
+    with _meta_lock:
+        if _meta is None:
+            if not meta_ready():
+                raise HTTPException(400, "Muse Image needs MODEL_API_KEY in the server's .env file.")
+            _meta = OpenAI(base_url=os.getenv("META_API_BASE", "https://api.meta.ai/v1"),
+                           api_key=os.getenv("MODEL_API_KEY"), timeout=240)   # Meta's API speaks the OpenAI format
+        return _meta
+
+
+def _generate_muse(image, prompt: str, size: str, model: str, quality: str):
+    """Meta Muse Image edit: input photo + prompt -> image bytes. Flat price, no quality levels."""
+    c = _meta_client()
+    base = dict(model=model, prompt=prompt, image=image, n=1, output_format="png")
+    try:
+        try:
+            result = c.images.edit(size=size, **base)         # size only sets the aspect ratio for Muse
+        except OpenAIError as e:
+            if "size" not in str(e).lower():
+                raise
+            result = c.images.edit(**base)                    # this endpoint refused size: retry without it
+    except OpenAIError as e:
+        raise HTTPException(502, f"Meta error: {e}")
+    item = result.data[0] if result.data else None
+    b64 = getattr(item, "b64_json", None)
+    if not b64:
+        raise HTTPException(502, "Meta returned no image data.")
+    return base64.b64decode(b64), None
+
+
 def _generate(image, prompt: str, size: str, model: str, quality: str):
     """Call the image model. Returns (png_bytes, usage). Nothing is saved here."""
     if model in NANO_MODELS:
         return _generate_nano(image, prompt, size, model, quality)
+    if model in META_MODELS:
+        return _generate_muse(image, prompt, size, model, quality)
     try:
         result = client.images.edit(model=model, image=image, prompt=prompt, size=size, quality=quality)
     except OpenAIError as e:

@@ -215,3 +215,11 @@ Nano Banana has no low/medium/high quality, so the page maps them to output size
 (price per image about $0.034 / $0.050 / $0.113). The picture shape follows the size you choose (1088x1360 -> 4:5).
 Cost is computed from the token usage Google returns (input $1.50 and output incl. thinking $30 per 1M tokens).
 Optional `NANO_THINKING=minimal|medium|high`. All Nano Banana images carry Google's SynthID watermark.
+
+
+## Muse Image (Meta)
+
+`muse-image-1.0` is in the image-model list. It uses Meta's Model API (OpenAI-compatible, `https://api.meta.ai/v1`).
+Put `MODEL_API_KEY=...` in `.env` on the server (key from https://dev.meta.ai/ -> API keys) and restart; without it the box is
+greyed out. Meta charges a flat $0.01 per image and Muse has no quality levels, so it always makes one image per branch
+(labelled "standard") whatever qualities you tick. The size you pick only sets the aspect ratio; Meta decides the pixels.

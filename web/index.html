@@ -123,7 +123,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     <div class="opts" id="efforts"></div>
     <h2 style="margin-top:16px">2. Image models <span class="hint">(pick any)</span></h2>
     <div class="opts" id="models"></div>
-    <h2 style="margin-top:16px">3. Quality <span class="hint">(pick one or more; for Nano Banana: low = 1K, medium = 2K, high = 4K)</span></h2>
+    <h2 style="margin-top:16px">3. Quality <span class="hint">(pick one or more; Nano Banana: low = 1K, medium = 2K, high = 4K; Muse Image has no quality levels, it always makes one image)</span></h2>
     <div class="opts" id="quals"></div>
     <h2 style="margin-top:16px">4. Size</h2>
     <select id="size"></select>
@@ -223,9 +223,11 @@ function textCost(t,x){
 function update(){
   const m=checked("model"), q=checked("qual"), p=plans(), tm=checked("tmodel");
   const direct=$("input[name=direct]").checked || !p.length;
-  const branches=p.length+(direct?1:0), per=m.length*q.length, n=branches*per;
+  const mo_=id=>OPT.models.find(y=>y.id===id)||{};
+  const branches=p.length+(direct?1:0), per=m.reduce((a,id)=>a+(mo_(id).no_quality?(m.length?1:0):q.length),0), n=branches*per;
   const [w,h]=$("#size").value.split("x").map(Number), px=w*h/1048576;
   const imgEst=branches*m.reduce((a0,id)=>{const mo=OPT.models.find(y=>y.id===id);
+    if(mo&&mo.no_quality) return a0+(mo.est_inr.low||0);
     return a0+q.reduce((a,x)=>a+(mo&&mo.fixed?(mo.est_inr[x]||0):(OPT.est_inr_1024[x]||0)*px),0)},0);
   const txtEst=p.reduce((a,[t,x])=>a+textCost(t,x),0);
   // grey out efforts no ticked model supports

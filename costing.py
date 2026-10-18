@@ -53,9 +53,14 @@ NANO_MODELS = {
 }
 NANO_SIZE_FOR_QUALITY = {"low": "1K", "medium": "2K", "high": "4K"}
 
+# Meta Muse Image: flat price per successfully generated image (Meta pricing page), no quality levels.
+META_MODELS = {"muse-image-1.0": {"per_image": 0.01}}
+
 
 def estimate_inr(quality, model=None):
     """Rough rupee estimate for one image (1024x1024 for OpenAI models; the tier price for Nano Banana)."""
+    if model in META_MODELS:
+        return META_MODELS[model]["per_image"] * USD_TO_INR
     if model in NANO_MODELS:
         tier = NANO_SIZE_FOR_QUALITY.get(quality, "2K")
         return NANO_MODELS[model]["per_image"][tier] * USD_TO_INR
@@ -76,6 +81,8 @@ def _as_dict(usage):
 def compute_cost(usage, quality="high", model=None):
     """Return (cost_inr, source, input_tokens, output_tokens)."""
     u = _as_dict(usage)
+    if model in META_MODELS:                    # flat price per image; the usage tokens Meta returns are not billed
+        return META_MODELS[model]["per_image"] * USD_TO_INR, "price list", 0, 0
     if model in NANO_MODELS:                    # usage was normalised by main._generate_nano
         r = NANO_MODELS[model]
         in_tok, out_tok = int(u.get("input_tokens") or 0), int(u.get("output_tokens") or 0)

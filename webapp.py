@@ -38,7 +38,7 @@ from fastapi.responses import HTMLResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import main as core
-from costing import (ESTIMATE_1024, LOG_FIELDS, NANO_MODELS, TEXT_RATES_PER_M, USD_TO_INR, _as_dict, estimate_inr,
+from costing import (ESTIMATE_1024, LOG_FIELDS, META_MODELS, NANO_MODELS, TEXT_RATES_PER_M, USD_TO_INR, _as_dict, estimate_inr,
                      log_text_cost, total_so_far)
 from prompts import build_custom_prompt
 from runs import new_run_dir, short_model, write_flow_comparison
@@ -50,7 +50,10 @@ WEB_MODELS = {
     "gpt-image-2.5-flare": "Flare: fast, good for everyday edits",
     "gpt-image-2.5-sunburst": "Sunburst: most capable, precise edits",
     "gemini-nano-banana-2.1": "Nano Banana 2.1 (Google): low = 1K, medium = 2K, high = 4K",
+    "muse-image-1.0": "Muse Image (Meta): flat $0.01 per image, no quality levels",
 }
+NO_QUALITY = {"muse-image-1.0"}          # models with no quality setting: one image per branch, labelled "standard"
+STANDARD = "standard"
 WEB_QUALITIES = ["low", "medium", "high"]
 SIZES = {
     "1024x1024": "Square 1:1 (1024x1024)",
@@ -248,11 +251,12 @@ def page():
 @router.get("/api/options")
 def options():
     return {
-        "models": [{"id": k, "label": v, "available": core.gemini_ready() if k in NANO_MODELS else True,
-                    "needs": "GEMINI_API_KEY in the server's .env" if k in NANO_MODELS else "",
+        "models": [{"id": k, "label": v, "available": core.gemini_ready() if k in NANO_MODELS else core.meta_ready() if k in META_MODELS else True,
+                    "needs": "GEMINI_API_KEY in the server's .env" if k in NANO_MODELS else "MODEL_API_KEY in the server's .env" if k in META_MODELS else "",
+                    "no_quality": k in NO_QUALITY,
                     # rupees per image for each quality; fixed=True means the price does not depend on the size picked
                     "est_inr": {q: round(estimate_inr(q, k), 2) for q in WEB_QUALITIES},
-                    "fixed": k in NANO_MODELS} for k, v in WEB_MODELS.items()],
+                    "fixed": k in NANO_MODELS or k in META_MODELS} for k, v in WEB_MODELS.items()],
         "qualities": WEB_QUALITIES,
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
         "text_models": [{"id": k, "label": v["label"], "efforts": v["efforts"],
@@ -275,7 +279,7 @@ async def compare(
     image: UploadFile = File(...),
     prompt: str = Form(...),
     models: list[str] = Form(...),
-    qualities: list[str] = Form(...),
+    qualities: list[str] = Form([]),
     size: str = Form("1024x1024"),
     text_models: list[str] = Form([]),
     efforts: list[str] = Form([]),
@@ -286,10 +290,12 @@ async def compare(
         raise HTTPException(400, "Enter a prompt.")
     models = [m for m in WEB_MODELS if m in models]            # keeps a fixed order, drops unknowns
     qualities = [q for q in WEB_QUALITIES if q in qualities]
-    if not models or not qualities:
+    if not models or (not qualities and any(m not in NO_QUALITY for m in models)):
         raise HTTPException(400, "Select at least one image model and one quality.")
     if any(m in NANO_MODELS for m in models) and not core.gemini_ready():
         raise HTTPException(400, "Nano Banana needs GEMINI_API_KEY in the server's .env file.")
+    if any(m in META_MODELS for m in models) and not core.meta_ready():
+        raise HTTPException(400, "Muse Image needs MODEL_API_KEY in the server's .env file.")
     text_models = [t for t in TEXT_MODELS if t in text_models]
     efforts = [x for x in EFFORTS if x in efforts]
     if text_models and not efforts:
@@ -301,7 +307,8 @@ async def compare(
     core._check_size(size)
 
     n_branches = len(plans) + (1 if use_direct else 0)
-    n_images = n_branches * len(models) * len(qualities)
+    combos = [(m, q) for m in models for q in ([STANDARD] if m in NO_QUALITY else qualities)]
+    n_images = n_branches * len(combos)
     if n_images > MAX_IMAGES:
         raise HTTPException(400, f"That would make {n_images} images (limit {MAX_IMAGES}). Select fewer options.")
     img = await core._read_image(image)
@@ -318,7 +325,7 @@ async def compare(
         b["status"] = "queued"
         b["prefix"] = "" if only_direct else f"{b['slug']}__"
         b["items"] = [{"label": f"{short_model(m)} \u00b7 {q}", "model": m, "quality": q, "status": "queued"}
-                      for m in models for q in qualities]
+                      for m, q in combos]
 
     gpt = [short_model(m).replace("gpt2.5", "") for m in models if m.startswith("gpt-image-2.5")]
     other = [short_model(m) for m in models if not m.startswith("gpt-image-2.5")]
@@ -326,7 +333,7 @@ async def compare(
     if not only_direct:
         slugs = (["direct"] if use_direct else []) + list(dict.fromkeys(TEXT_MODELS[t]["slug"] for t, _ in plans))
         mpart = "+".join(slugs) + "__" + mpart
-    run_dir = new_run_dir(core.OUTPUT_DIR, mpart, "+".join(qualities))
+    run_dir = new_run_dir(core.OUTPUT_DIR, mpart, "+".join(dict.fromkeys(q for _, q in combos)))
     folder = run_dir.name
     in_name = core._save_input(run_dir, img)
     JOBS[folder] = {
