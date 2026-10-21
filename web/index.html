@@ -109,6 +109,8 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <button data-tab="new" class="on">New run</button>
   <button data-tab="hist">History</button>
   <button data-tab="review">Review</button>
+  <button data-tab="batch">Batch</button>
+  <button data-tab="brev">Batch review</button>
   <button data-tab="log">Cost log</button>
 </nav>
 
@@ -171,6 +173,57 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
  <div id="rvlist"></div>
 </section>
 
+
+<!-- ============ BATCH ============ -->
+<section id="tab-batch" class="hide">
+ <div class="card">
+  <div class="form">
+   <div>
+    <h2>1. Prompt <span class="hint">(sent exactly as typed to every image)</span></h2>
+    <textarea id="bprompt" style="min-height:200px" placeholder="Paste your prompt here"></textarea>
+    <div class="count"><span id="bcnt">0</span> characters</div>
+    <h2 style="margin-top:10px">2. Batch name <span class="hint">(optional)</span></h2>
+    <input id="bname" type="text" placeholder="e.g. universal prompt test" style="width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    <h2 style="margin-top:10px">3. Size</h2>
+    <select id="bsize"></select>
+    <p class="hint">Model is fixed: <b>gpt-image-2.5-sunburst</b>, quality <b>low</b>. No analysis step.</p>
+   </div>
+   <div>
+    <h2>4. Product images <span class="hint">(select many at once)</span></h2>
+    <label class="drop" id="bdrop"><input type="file" id="bfile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+      <div>Click or drop several images here (PNG, JPEG, WEBP)</div></label>
+    <div id="bthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+    <div class="hint" id="bsel"></div>
+   </div>
+  </div>
+  <div class="go" style="margin-top:16px">
+   <button class="primary" id="brun" disabled>Start batch</button>
+   <span class="est" id="best"></span><span class="msg" id="bmsg"></span>
+  </div>
+ </div>
+ <div id="bdetail" class="hide card"></div>
+ <h2 style="margin:18px 0 8px">Earlier batches</h2>
+ <div id="blist"></div>
+</section>
+
+<!-- ============ BATCH REVIEW ============ -->
+<section id="tab-brev" class="hide">
+ <div class="card">
+  <div class="rvbar">
+   <label>Batch <select id="brbatch"><option value="">All batches</option></select></label>
+   <label>Show <select id="brstatus"><option value="">All images</option><option value="todo">Not reviewed yet</option><option value="done">Already reviewed</option></select></label>
+   <span class="tot" id="brprog"></span>
+  </div>
+  <div class="rvbar" style="margin-top:10px">
+   <a class="ghost" id="brx1" href="/batch_review.xlsx">Download Excel (with pictures)</a>
+   <a class="ghost" id="brx2" href="/batch_review.xlsx?pictures=0">Excel, links only (small)</a>
+   <label class="chk"><input type="checkbox" id="bronly"> Excel: reviewed images only</label>
+  </div>
+  <p class="hint">This is a separate review sheet for batch runs. Answer the questions, then press <b>Save review</b>.</p>
+ </div>
+ <div id="brlist"></div>
+</section>
+
 <!-- ============ COST LOG ============ -->
 <section id="tab-log" class="hide">
  <div class="card">
@@ -198,8 +251,9 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","hist","review","log"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  ["new","hist","review","batch","brev","log"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
   if(b.dataset.tab==="hist")loadHistory(); if(b.dataset.tab==="review")loadReview(); if(b.dataset.tab==="log")loadLog();
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="brev")loadBrev();
 });
 
 /* ---------- lightbox ---------- */
@@ -471,6 +525,176 @@ async function loadLog(){
       j.rows.map(r=>"<tr>"+cols.map(([k])=>`<td class="${/inr/.test(k)?"n":""}">${esc(/inr/.test(k)?Number(r[k]).toFixed(2):r[k])}</td>`).join("")+"</tr>").join("");
   }catch(e){$("#logtot").textContent=e.message}
 }
+
+/* ================= BATCH ================= */
+let BOPT=null, bfiles=[], bpoll=null;
+async function binit(){
+  BOPT=await api("/api/batch/options");
+  $("#bsize").innerHTML=BOPT.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  $("#bfile").onchange=e=>{addBFiles(e.target.files);e.target.value=""};
+  const d=$("#bdrop");
+  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
+  d.addEventListener("drop",e=>addBFiles(e.dataTransfer.files));
+  $("#bprompt").oninput=bupdate; $("#bsize").onchange=bupdate;
+  bupdate();
+}
+function addBFiles(fl){
+  for(const f of fl){ if(!/^image\/(png|jpeg|webp)$/.test(f.type))continue;
+    if(!bfiles.some(x=>x.name===f.name&&x.size===f.size))bfiles.push(f); }
+  bthumbs(); bupdate();
+}
+function bthumbs(){
+  $("#bthumbs").innerHTML=bfiles.map((f,i)=>`<figure style="position:relative"><img style="cursor:default;aspect-ratio:1/1;object-fit:cover" src="${URL.createObjectURL(f)}" alt="" title="${esc(f.name)}"><button class="ghost" data-rm="${i}" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:12px;background:var(--card)">x</button></figure>`).join("");
+}
+$("#bthumbs").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;bfiles.splice(+b.dataset.rm,1);bthumbs();bupdate()});
+function bupdate(){
+  const n=bfiles.length, ok=$("#bprompt").value.trim().length>0;
+  $("#bcnt").textContent=$("#bprompt").value.length;
+  $("#bsel").textContent=n?`${n} image${n===1?"":"s"} selected (limit ${BOPT?BOPT.max_images:"..."})`:"No images selected yet.";
+  let est="";
+  if(n&&BOPT&&BOPT.est_inr_1024!=null){
+    const [w,h]=$("#bsize").value.split("x").map(Number);
+    est=`${n} image${n===1?"":"s"} · rough estimate <b>≈ ${inr(n*BOPT.est_inr_1024*w*h/1048576)}</b> (real cost is shown after)`;
+  }
+  const over=BOPT&&n>BOPT.max_images;
+  if(over)est+=` <span class="msg">Too many images (limit ${BOPT.max_images}).</span>`;
+  $("#best").innerHTML=est;
+  $("#brun").disabled=!(n&&ok)||over;
+}
+$("#brun").onclick=async()=>{
+  $("#bmsg").textContent=""; $("#brun").disabled=true;
+  const fd=new FormData();
+  bfiles.forEach(f=>fd.append("images",f)); fd.append("prompt",$("#bprompt").value.trim());
+  fd.append("size",$("#bsize").value); fd.append("name",$("#bname").value.trim());
+  try{
+    const {folder}=await api("/api/batch",{method:"POST",body:fd});
+    bfiles=[]; bthumbs(); bupdate();
+    showBatch(folder); loadBatches();
+  }catch(e){$("#bmsg").textContent=e.message; bupdate()}
+};
+function bchip(st){
+  const t={done:"done",running:"working...",queued:"waiting",error:"failed",interrupted:"interrupted"}[st]||st;
+  return `<span class="chip ${st==="running"?"run":(st==="error"||st==="interrupted")?"bad":""}">${t}</span>`;
+}
+function showBatch(folder){
+  clearTimeout(bpoll);
+  const box=$("#bdetail"); box.classList.remove("hide");
+  const tick=async()=>{
+    try{
+      const j=await api("/api/batch/"+encodeURIComponent(folder));
+      renderBatch(j);
+      if(j.state==="running"){bpoll=setTimeout(tick,2500);return}
+      refreshSpent(); loadBatches();
+    }catch(e){bpoll=setTimeout(tick,4000)}
+  };
+  tick();
+}
+function renderBatch(j){
+  const [w,h]=(j.size||"1088x1360").split("x").map(Number), f=encodeURIComponent(j.folder);
+  const failed=j.items.filter(i=>i.status==="error").length;
+  let html=`<div class="bar"><span class="tot">${esc(j.name||j.folder)} · ${esc(j.folder)}</span>${bchip(j.state)}
+     <span class="chip">${j.done}/${j.total} images</span><span class="chip">cost ${inr(j.total_inr)}</span>
+     ${j.state!=="running"&&failed?`<button class="ghost" id="bretry">Retry ${failed} failed</button>`:""}
+     <button class="ghost" id="bclose">Close</button></div>
+     <details class="box prompt"><summary>Prompt used</summary><pre>${esc(j.prompt)}</pre></details>
+     <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">`;
+  for(const it of j.items){
+    let out;
+    if(it.status==="done"&&it.url)out=`<img src="${esc(it.url)}" alt="">`;
+    else if(it.status==="error")out=`<div class="ph err" style="aspect-ratio:${w}/${h}">Failed: ${esc(it.error)}</div>`;
+    else out=`<div class="ph" style="aspect-ratio:${w}/${h}"><div class="spin"></div>${it.status==="running"?"Generating...":"Waiting..."}</div>`;
+    html+=`<figure><div style="display:grid;grid-template-columns:1fr 1fr"><img src="${esc(it.input_url)}" alt="" style="aspect-ratio:${w}/${h};object-fit:cover">${out}</div><figcaption><b>${esc(it.orig_name)}</b>${it.status==="done"?inr(it.cost_inr):""}</figcaption></figure>`;
+  }
+  html+="</div>";
+  $("#bdetail").innerHTML=html;
+  const r=$("#bretry"); if(r)r.onclick=async()=>{try{await api(`/api/batch/${f}/retry`,{method:"POST"});showBatch(j.folder)}catch(e){alert(e.message)}};
+  $("#bclose").onclick=()=>{clearTimeout(bpoll);$("#bdetail").classList.add("hide")};
+}
+async function loadBatches(){
+  try{
+    const {batches}=await api("/api/batch");
+    $("#blist").innerHTML=batches.length?batches.map(b=>`<div class="card run"><div class="folder">${esc(b.folder)} · ${esc(b.created)}</div>
+      <h3 class="pr">${esc(b.name||"")}</h3><div class="m">${bchip(b.state)} ${b.done}/${b.total} images${b.failed?` · <span class="err">${b.failed} failed</span>`:""} · cost <b>${inr(b.total_inr)}</b> · Prompt: ${esc(b.prompt.slice(0,120))}${b.prompt.length>120?"...":""}</div>
+      <div class="links"><button class="ghost" data-open="${esc(b.folder)}">Open</button><a class="ghost" href="#" data-rev="${esc(b.folder)}">Review these</a></div></div>`).join(""):'<div class="card hint">No batches yet.</div>';
+  }catch(e){$("#blist").innerHTML=`<div class="card err">${esc(e.message)}</div>`}
+}
+$("#blist").addEventListener("click",e=>{
+  const o=e.target.closest("[data-open]"); if(o){showBatch(o.dataset.open);$("#bdetail").scrollIntoView({behavior:"smooth"});return}
+  const r=e.target.closest("[data-rev]"); if(r){e.preventDefault();$('nav button[data-tab="brev"]').click();$("#brbatch").value=r.dataset.rev;loadBrev()}
+});
+
+/* ================= BATCH REVIEW ================= */
+let BR={fields:[],items:[]};
+$("#brbatch").onchange=()=>loadBrev(); $("#brstatus").onchange=()=>loadBrev();
+function brLinks(){
+  const b=$("#brbatch").value, q=[];
+  if(b)q.push("batch="+encodeURIComponent(b));
+  if($("#bronly").checked)q.push("reviewed_only=1");
+  $("#brx1").href="/batch_review.xlsx"+(q.length?"?"+q.join("&"):"");
+  $("#brx2").href="/batch_review.xlsx?"+q.concat("pictures=0").join("&");
+}
+$("#bronly").onchange=brLinks;
+function brCard(it,i){
+  const f=BR.fields, m=it.review||{}, saved=it.reviewed;
+  return `<div class="card rv ${saved?"locked":""}" data-i="${i}">
+    <figure><img src="${esc(it.input_url)}" alt="input" loading="lazy"><figcaption>Input · ${esc(it.orig_name)}</figcaption></figure>
+    <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · sunburst · low</figcaption></figure>
+    <div class="info">
+      <h3>${esc(it.folder)}<span class="tag ${saved?"ok":"todo"}">${saved?"✓ Reviewed":"Not reviewed"}</span></h3>
+      <div class="sm">${esc(it.time)}${saved&&m.updated?` · saved ${esc(m.updated)}`:""}</div>
+      <details><summary>Prompt</summary><pre>${esc(it.prompt)}</pre></details>
+      <div class="qs">${f.map(x=>`<div class="qrow"><span>${esc(x.label)}</span><span class="yn" data-k="${x.key}">
+        <button class="y ${m[x.key]==="yes"?"on":""}" data-v="yes">Yes</button><button class="n ${m[x.key]==="no"?"on":""}" data-v="no">No</button></span></div>`).join("")}</div>
+      <textarea placeholder="Any other feedback (optional)" data-comment ${saved?"readonly":""}>${esc(m.comment||"")}</textarea>
+      <div class="rvact">
+        <button class="primary" data-act="save" ${saved?'style="display:none"':""}>Save review</button>
+        <button class="ghost" data-act="cancel" style="display:none">Cancel</button>
+        <button class="ghost" data-act="edit" ${saved?"":'style="display:none"'}>Edit review</button>
+        <span class="saved"></span>
+      </div></div></div>`;
+}
+async function loadBrev(){
+  const box=$("#brlist"); brLinks();
+  try{
+    const b=$("#brbatch").value, st=$("#brstatus").value;
+    const j=await api("/api/batchreview/items?"+[b&&"batch="+encodeURIComponent(b),st&&"status="+st].filter(Boolean).join("&"));
+    BR=j; const sel=$("#brbatch"), cur=sel.value;
+    sel.innerHTML='<option value="">All batches</option>'+j.batches.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("");
+    sel.value=cur; brLinks();
+    $("#brprog").textContent=`${j.reviewed_count} of ${j.total} images reviewed`;
+    box.innerHTML=j.items.length?j.items.map(brCard).join(""):'<div class="card hint">Nothing to show here.</div>';
+  }catch(e){box.innerHTML=`<div class="card err">${esc(e.message)}</div>`}
+}
+$("#brlist").addEventListener("click",async e=>{
+  const card=e.target.closest(".rv"); if(!card)return;
+  const it=BR.items[+card.dataset.i];
+  const yb=e.target.closest(".yn button");
+  if(yb){ if(card.classList.contains("locked"))return;
+    const on=yb.classList.contains("on"); yb.parentElement.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    if(!on)yb.classList.add("on"); rvMsg(card,"Not saved yet: press Save review",false); return; }
+  const act=e.target.closest("[data-act]"); if(!act)return;
+  if(act.dataset.act==="edit"){ rvLock(card,false);
+    card.querySelector('[data-act="cancel"]').style.display=""; card.querySelector('[data-act="save"]').textContent="Save changes";
+    rvMsg(card,"Editing: press Save changes when done",false); }
+  else if(act.dataset.act==="cancel"){ rvApply(card,it.review||{}); rvLock(card,true); card.querySelector('[data-act="save"]').textContent="Save review"; rvMsg(card,"",true); }
+  else if(act.dataset.act==="save"){
+    act.disabled=true; rvMsg(card,"Saving...",true);
+    try{
+      const r=await api("/api/batchreview",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({folder:it.folder,file:it.file,...rvRead(card)})});
+      it.review=r.saved; it.reviewed=true;
+      act.textContent="Save review"; rvLock(card,false); rvLock(card,true);
+      const tag=card.querySelector(".tag"); tag.className="tag ok"; tag.textContent="✓ Reviewed";
+      card.querySelector(".sm").textContent=card.querySelector(".sm").textContent.replace(/ · saved .*$/,"")+" · saved "+r.saved.updated;
+      rvMsg(card,"Saved ✓",true);
+      const j=await api("/api/batchreview/items"); $("#brprog").textContent=`${j.reviewed_count} of ${j.total} images reviewed`;
+    }catch(err){rvMsg(card,"Not saved: "+err.message,false)}
+    finally{act.disabled=false}
+  }
+});
+
+binit().catch(e=>{$("#bmsg").textContent="Could not load batch options: "+e.message});
 init().catch(e=>{$("#msg").textContent="Could not load: "+e.message});
 </script>
 </body>

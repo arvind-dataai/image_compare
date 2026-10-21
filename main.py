@@ -414,3 +414,5 @@ from webapp import PasswordMiddleware, router as web_router  # noqa: E402  (need
 
 app.add_middleware(PasswordMiddleware)
 app.include_router(web_router)
+from batch import router as batch_router  # noqa: E402  (batch mode: one prompt x many images, own review sheet)
+app.include_router(batch_router)

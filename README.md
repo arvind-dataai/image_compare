@@ -223,3 +223,17 @@ Optional `NANO_THINKING=minimal|medium|high`. All Nano Banana images carry Googl
 Put `MODEL_API_KEY=...` in `.env` on the server (key from https://dev.meta.ai/ -> API keys) and restart; without it the box is
 greyed out. Meta charges a flat $0.01 per image and Muse has no quality levels, so it always makes one image per branch
 (labelled "standard") whatever qualities you tick. The size you pick only sets the aspect ratio; Meta decides the pixels.
+
+## Batch mode (one prompt x many images) and its own review sheet
+
+Two extra tabs in the web page:
+
+* **Batch**: paste ONE prompt, pick many product images, press *Start batch*. Every image is made with
+  `gpt-image-2.5-sunburst`, quality `low`, with your prompt sent exactly as typed (no text model, no extra rules).
+  It runs in the background (3 at a time), shows progress and cost, and has *Retry failed*.
+  Results are saved in `outputs/batch_<n>_<name>/` (inputs `in_001_...`, outputs `out_001_...png`, plus `batch.json`).
+* **Batch review**: a separate review sheet (same 7 Yes/No questions + comment, Save / Edit review) saved in
+  `batch_reviews.json`, with its own Excel download (`/batch_review.xlsx`). The normal History, Review tab and
+  `reviews.json` never show batch images.
+
+Limits: `WEB_BATCH_MAX` (default 100 images per batch), `WEB_BATCH_WORKERS` (default 3). Code: `batch.py`.
