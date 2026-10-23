@@ -141,15 +141,13 @@ One request costs one text call plus three image calls, and every part is logged
 
 ## Web app (for your team)
 
-Start the server as usual and open `http://localhost:8000/`. One page, three tabs:
+Start the server as usual and open `http://localhost:8000/`. One page, four tabs (New run, Batch, Batch review, Scene library):
 
 - **New run**: pick models (flare, sunburst, or both), qualities (low, medium, high, one or several), a size,
   a one-line prompt and the product image. It shows a rough price before you start, then makes every
   model x quality combination (for example 2 models x 3 qualities = 6 images) in one numbered folder.
   Images appear as they finish, with the real cost under each. Buttons: open the shareable comparison page,
   download the whole run as a zip, copy the comparison link.
-- **History**: every run with its prompt, images, cost and links.
-- **Cost log**: `cost_log.csv` as a table, newest first, with a download link (`/cost.csv`).
 
 Setting a password: add `APP_PASSWORD=something` to `.env`. The browser then asks for it (any user name).
 Do this before putting the app on a public server, because every run spends your OpenAI credits.
@@ -190,21 +188,8 @@ image + prompt -> text model + effort -> analysis + written prompt -> image mode
 - The comparison page shows the input, your prompt, and for each branch the model's analysis, the prompt it wrote,
   and its images, followed by a cost table with every text and image step.
 - If a text step fails, its images are skipped and the other branches carry on. A text call that ran but gave
-  an unreadable reply is still charged, and it shows in the cost log.
+  an unreadable reply is still charged (costs are still written to `cost_log.csv` on the server).
 
-
-## Review tab and Excel
-
-The **Review** tab shows one card per generated image: run id, date, input image, initial prompt, text model and effort
-(or Direct), the analysis, the prompt given to the image model, and the output image. Click Yes / No for: satisfied with
-the output, correct object identification, correct image separation, happy with the background, product unchanged,
-lighting and shadows look natural, usable as an ad without edits, add an optional comment, then press **Save review**.
-Saved cards show a green "Reviewed" tag; **Edit review** unlocks them (Save changes / Cancel). Reviews are stored in
-`reviews.json` next to `cost_log.csv` (not in git). Filter by run, or show only not-yet-reviewed / already-reviewed images.
-
-`/review.xlsx` downloads one row per image with pictures (or `?pictures=0` for links only), `?run=<folder>` for one run,
-`?reviewed_only=1` to skip images not reviewed yet, plus a Summary sheet with Yes/No counts.
-Links in the sheet use the address you opened the site on (or set `PUBLIC_URL=https://your-domain` in `.env`).
 
 ## Nano Banana (Google)
 
@@ -233,7 +218,33 @@ Two extra tabs in the web page:
   It runs in the background (3 at a time), shows progress and cost, and has *Retry failed*.
   Results are saved in `outputs/batch_<n>_<name>/` (inputs `in_001_...`, outputs `out_001_...png`, plus `batch.json`).
 * **Batch review**: a separate review sheet (same 7 Yes/No questions + comment, Save / Edit review) saved in
-  `batch_reviews.json`, with its own Excel download (`/batch_review.xlsx`). The normal History, Review tab and
-  `reviews.json` never show batch images.
+  `batch_reviews.json`, with its own Excel download (`/batch_review.xlsx`). Each image shows its own cost (and the Excel has cost columns).
 
 Limits: `WEB_BATCH_MAX` (default 100 images per batch), `WEB_BATCH_WORKERS` (default 3). Code: `batch.py`.
+
+## Gemini and Meta text models
+
+The analysis step (text model) can now also use **Gemini 4 Argon** and **Gemini 3.8 Flash** (Google, `GEMINI_API_KEY`; effort = thinking level low / medium / high)
+and **Muse Spark 1.3** / **Muse Wonder 1.0** (Meta, `MODEL_API_KEY`; effort minimal to max). They appear in the "Analysis step" list and are greyed out
+until the key is in the server's `.env`. Costs use the published prices (Argon $2 / $10 per 1M tokens until 30 Nov 2026, then $4 / $20; Flash $0.75 / $3.75 until 31 Dec 2026, then $1.50 / $7.50,
+applied automatically; Spark $1.25 / $4.25; Wonder $4 / $20); thinking tokens are counted as output. Prices live in `costing.py` (`TEXT_RATES_PER_M`).
+
+## Scene flow (Batch tab) and the Scene library
+
+Every uploaded photo is its **own product** and goes through the whole flow separately:
+**1. identify** (text model, prompt A1 + the known categories) -> category and subcategory, reusing an existing name whenever the product fits it;
+**2. new scene** (text model, prompt A2 + the earlier scenes of that subcategory + your Prompt B) -> a structured scene (setting, surface, camera, lighting,
+palette, props, mood, keep-identical, avoid ...) that must differ from the earlier ones;
+**3. image**: Prompt C = rendered scene + "Additional instructions:" + your Prompt B -> gpt-image-2.5-sunburst, low.
+
+* Order inside one run: all photos are identified first. Photos that land in the same subcategory are then done one after the other
+  (each new scene sees the scenes just written for the earlier photos); different subcategories run in parallel.
+* Prompts A1 and A2 are in `scene_classify_prompt.txt` and `scene_write_prompt.txt`; the page shows them in editable boxes (with Reset to default).
+  The code adds the data blocks (known categories, earlier scenes, required JSON format) after them.
+* Scenes are saved in `scene_library.json` (category > subcategory > scenes, each with a timestamp, status, output image).
+  A scene whose image failed is marked `failed` and does not count as "used". Back this file up; it is the memory of the flow.
+* Retry continues each failed product from the step that failed (finished steps are not paid for twice). Results appear in the Batch review tab and its Excel.
+* Code: `sceneflow.py` (the steps), `scene_library.py` (storage and name matching). Limit: `WEB_BATCH_MAX` photos per run (default 100).
+
+
+Note: the page now has four tabs: New run, Batch, Batch review and Scene library. The old History, Review and Cost log tabs were removed.

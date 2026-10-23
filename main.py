@@ -202,6 +202,52 @@ def _generate_muse(image, prompt: str, size: str, model: str, quality: str):
     return base64.b64decode(b64), None
 
 
+def generate_text(provider: str, model: str, effort: str, instructions: str, user_text: str, image):
+    """One text-model call that reads photo(s). provider: openai | google | meta.
+    `image` is one (name, bytes, content-type) tuple or a list of them. user_text is sent as written.
+    Returns (reply text, usage dict {"input_tokens", "output_tokens"}); output includes hidden thinking tokens."""
+    images = image if isinstance(image, list) else [image]
+    parts = [(base64.b64encode(im[1]).decode("ascii"), im[2] or "image/png") for im in images]
+    if provider == "google":
+        try:
+            it = _gemini_client().interactions.create(
+                model=model,
+                input=[{"type": "text", "text": f"{instructions}\n\n{user_text}"}]
+                      + [{"type": "image", "data": b64, "mime_type": mime} for b64, mime in parts],
+                generation_config={"thinking_level": effort},
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"Google error: {e}")
+        u = getattr(it, "usage", None)
+        usage = {"input_tokens": int(getattr(u, "total_input_tokens", 0) or 0),
+                 "output_tokens": int(getattr(u, "total_output_tokens", 0) or 0) + int(getattr(u, "total_thought_tokens", 0) or 0)}
+        return (getattr(it, "output_text", None) or ""), usage
+    pics = [{"type": "input_image", "image_url": f"data:{mime};base64,{b64}"} for b64, mime in parts]
+    if provider == "meta":
+        c = _meta_client()
+        msg = [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": user_text}] + pics}]
+        try:
+            try:
+                resp = c.responses.create(model=model, instructions=instructions, reasoning={"effort": effort}, input=msg)
+            except OpenAIError as e:
+                if "instruction" not in str(e).lower():
+                    raise
+                folded = [{"type": "message", "role": "user",
+                           "content": [{"type": "input_text", "text": f"{instructions}\n\n{user_text}"}] + pics}]
+                resp = c.responses.create(model=model, reasoning={"effort": effort}, input=folded)
+        except OpenAIError as e:
+            raise HTTPException(502, f"Meta error: {e}")
+    else:
+        try:
+            resp = client.responses.create(model=model, instructions=instructions, reasoning={"effort": effort},
+                                           input=[{"role": "user", "content": [{"type": "input_text", "text": user_text}] + pics}])
+        except OpenAIError as e:
+            raise HTTPException(502, f"OpenAI error: {e}")
+    return (resp.output_text or ""), _as_dict(getattr(resp, "usage", None))
+
+
 def _generate(image, prompt: str, size: str, model: str, quality: str):
     """Call the image model. Returns (png_bytes, usage). Nothing is saved here."""
     if model in NANO_MODELS:
@@ -209,6 +255,7 @@ def _generate(image, prompt: str, size: str, model: str, quality: str):
     if model in META_MODELS:
         return _generate_muse(image, prompt, size, model, quality)
     try:
+        # `image` may be one tuple or a list of them (several photos of one product)
         result = client.images.edit(model=model, image=image, prompt=prompt, size=size, quality=quality)
     except OpenAIError as e:
         raise HTTPException(502, f"OpenAI error: {e}")
@@ -416,3 +463,5 @@ app.add_middleware(PasswordMiddleware)
 app.include_router(web_router)
 from batch import router as batch_router  # noqa: E402  (batch mode: one prompt x many images, own review sheet)
 app.include_router(batch_router)
+from sceneflow import router as scene_router  # noqa: E402  (batch scene flow + scene library)
+app.include_router(scene_router)

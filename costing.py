@@ -174,7 +174,26 @@ TEXT_RATES_PER_M = {
     "gpt-6-astra": (10.00, 50.00),
     "gpt-6.1-sol": (2.00, 10.00),
     "gpt-6-luna": (0.10, 0.50),
+    "gemini-4-argon": (2.00, 10.00),        # Google intro price; doubles from 1 Dec 2026 (see TEXT_RATE_CHANGES). Thinking bills as output.
+    "gemini-3.8-flash": (0.75, 3.75),       # Google intro price; doubles from 1 Jan 2027 (see TEXT_RATE_CHANGES)
+    "muse-spark-1.3": (1.25, 4.25),         # Meta Model API, standard mode
+    "muse-wonder-1.0": (4.00, 20.00),
 }
+# Known future price changes: model -> [(first day, (input, output))]. The newest entry whose day has arrived is used.
+TEXT_RATE_CHANGES = {
+    "gemini-4-argon": [("2026-12-01", (4.00, 20.00))],
+    "gemini-3.8-flash": [("2027-01-01", (1.50, 7.50))],
+}
+
+
+def text_rate(model: str) -> tuple:
+    """(input, output) USD per 1M tokens for a text model today."""
+    rate = TEXT_RATES_PER_M.get(model, (0.0, 0.0))
+    today = datetime.now().strftime("%Y-%m-%d")
+    for day, r in sorted(TEXT_RATE_CHANGES.get(model, [])):
+        if today >= day:
+            rate = r
+    return rate
 
 
 def log_text_cost(log_path, model, usage, note=""):
@@ -182,7 +201,7 @@ def log_text_cost(log_path, model, usage, note=""):
     u = _as_dict(usage)
     in_tok = int(u.get("input_tokens") or 0)
     out_tok = int(u.get("output_tokens") or 0)
-    rate_in, rate_out = TEXT_RATES_PER_M.get(model, (0.0, 0.0))
+    rate_in, rate_out = text_rate(model)
     cost = (in_tok * rate_in + out_tok * rate_out) / 1_000_000 * USD_TO_INR
     source = "usage" if (in_tok or out_tok) and model in TEXT_RATES_PER_M else "unknown"
     p = Path(log_path)

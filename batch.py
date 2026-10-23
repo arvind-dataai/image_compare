@@ -14,6 +14,7 @@ Kept completely apart from the normal runs and the normal Review tab:
 
 The prompt is sent exactly as typed: no text model, no extra rules added.
 """
+import copy
 import io
 import json
 import os
@@ -35,7 +36,7 @@ BATCH_QUALITY = "low"
 BATCH_MAX = int(os.getenv("WEB_BATCH_MAX", "100"))                       # safety cap on images in one batch
 BATCH_POOL = ThreadPoolExecutor(max_workers=int(os.getenv("WEB_BATCH_WORKERS", "3")))
 _BFOLDER = re.compile(r"^batch_\d+_[A-Za-z0-9_.+\-]+$")
-_LOCK = threading.Lock()                                                 # guards batch.json writes + folder numbering
+_LOCK = threading.RLock()                                                # guards batch.json writes, live-state changes + folder numbering
 BJOBS: dict = {}                                                         # folder -> live state (also saved in batch.json)
 
 REVIEW_FILE = Path(core.COST_LOG).parent / "batch_reviews.json"
@@ -99,7 +100,8 @@ def _safe_name(name: str) -> str:
 def _view(job: dict) -> dict:
     """What the browser needs: the job without file paths it cannot use."""
     f = job["folder"]
-    out = dict(job)
+    with _LOCK:
+        out = copy.deepcopy(job)
     out["items"] = [dict(it, input_url=f"/outputs/{f}/{it['input']}",
                          url=(f"/outputs/{f}/{it['file']}" if it.get("file") else None)) for it in job["items"]]
     return out
@@ -217,7 +219,10 @@ def batch_list():
             j = _load(f)
         except HTTPException:
             continue
+        cats = list(dict.fromkeys(f"{(x.get('scene') or {}).get('category')} > {(x.get('scene') or {}).get('subcategory')}"
+                                  for x in j["items"] if (x.get("scene") or {}).get("category")))
         out.append({"folder": f, "state": j["state"], "name": j.get("name", ""), "created": j.get("created", ""),
+                    "flow": j.get("flow", "direct"), "categories": cats,
                     "prompt": j["prompt"], "total": j["total"], "done": j.get("done", 0),
                     "failed": sum(1 for it in j["items"] if it["status"] == "error"),
                     "total_inr": j.get("total_inr", 0)})
@@ -237,6 +242,12 @@ def batch_retry(folder: str):
     if folder in BJOBS and BJOBS[folder]["state"] == "running":
         raise HTTPException(400, "This batch is still running.")
     BJOBS[folder] = job                              # adopt a saved (finished / interrupted) batch
+    if job.get("flow") == "scene":                   # scene flow: continue each failed product from the step that failed
+        from sceneflow import retry_scene_flow
+        n = retry_scene_flow(folder, job)
+        if not n:
+            raise HTTPException(400, "Nothing to retry: every image is done.")
+        return {"folder": folder, "retrying": n}
     bad = [i for i, it in enumerate(job["items"]) if it["status"] != "done"]
     if not bad:
         raise HTTPException(400, "Nothing to retry: every image is done.")
@@ -268,10 +279,22 @@ def _rows(folders: list) -> list:
             continue
         for it in j["items"]:
             if it.get("status") == "done" and it.get("file"):
-                out.append({"folder": f, "name": j.get("name", ""), "time": j.get("created", ""), "prompt": j["prompt"],
+                sc, cfg = it.get("scene") or {}, j.get("scene_cfg") or {}
+                extra = ({"flow": "scene", "category": sc.get("category", ""), "subcategory": sc.get("subcategory", ""),
+                          "text_model": cfg.get("text_model", ""), "effort": f"{cfg.get('effort_classify', '')} / {cfg.get('effort_scene', '')}",
+                          "scene_description": sc.get("scene_description", ""), "prompt_b": cfg.get("prompt_b", ""),
+                          "new_category": sc.get("new_category"), "new_subcategory": sc.get("new_subcategory"),
+                          "previous_count": sc.get("previous_count", 0)}
+                         if j.get("flow") == "scene" else {"flow": "direct"})
+                out.append({**extra, "folder": f, "name": j.get("name", ""), "time": j.get("created", ""),
+                            "prompt": sc.get("prompt_c") if j.get("flow") == "scene" else j["prompt"],
                             "size": j["size"], "model": j.get("model", BATCH_MODEL), "quality": j.get("quality", BATCH_QUALITY),
                             "input": it["input"], "orig_name": it.get("orig_name", ""), "file": it["file"],
-                            "cost_inr": it.get("cost_inr", 0)})
+                            "cost_inr": it.get("cost_inr", 0),
+                            "identify_cost": sc.get("classify_cost_inr") if j.get("flow") == "scene" else None,
+                            "scene_cost": sc.get("scene_cost_inr") if j.get("flow") == "scene" else None,
+                            "total_cost": round((it.get("cost_inr") or 0) + (sc.get("classify_cost_inr") or 0)
+                                                + (sc.get("scene_cost_inr") or 0), 4)})
     return out
 
 
@@ -320,6 +343,7 @@ async def batchreview_save(payload: dict):
 @router.get("/batch_review.xlsx")
 def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, reviewed_only: int = 0):
     import xlsxwriter
+    from xlsxwriter.utility import xl_col_to_name
     from webapp import _png_size, _public_base
     if batch:
         _dir(batch)
@@ -343,11 +367,17 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
     link = wb.add_format({"font_color": "#0563c1", "underline": 1, "valign": "top"})
     green = wb.add_format({"valign": "top", "align": "center", "bg_color": "#d9f2e3", "bold": True})
     red = wb.add_format({"valign": "top", "align": "center", "bg_color": "#f9d9d6", "bold": True})
+    money = wb.add_format({"valign": "top", "num_format": "0.00"})
+    money_b = wb.add_format({"valign": "top", "num_format": "0.00", "bold": True})
     cap = lambda t: (lambda s: s if len(s) <= 32000 else s[:32000] + " ...[cut]")(str(t or ""))
 
     ws = wb.add_worksheet("Batch review")
-    cols = [("Batch id", 24), ("Date", 17), ("Input image", 24), ("Input file", 22), ("Prompt", 60), ("Image model", 22),
-            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14), ("Cost (INR)", 10)]
+    cols = [("Batch id", 24), ("Date", 17), ("Input image", 24), ("Input file", 22), ("Prompt given to the image model", 60), ("Image model", 22),
+            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14), ("Image cost (INR)", 11),
+            ("Identify cost (INR)", 11), ("Scene cost (INR)", 11), ("Total cost (INR)", 11),
+            ("Flow", 9), ("Category", 16), ("Subcategory", 18), ("Text model", 16), ("Effort (identify / scene)", 14),
+            ("Scene description", 60), ("Prompt B (yours)", 40)]
+    A0 = len(cols)                                   # first answer column
     cols += [(l, 15) for _, l in REVIEW_FIELDS] + [("Comment", 40), ("Reviewed at", 17)]
     for i, (t, w) in enumerate(cols):
         ws.write(0, i, t, hdr)
@@ -386,12 +416,23 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
                 put_image(n, 8, out_path)
             if base:
                 ws.write_url(n, 9, f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
-        ws.write(n, 10, r["cost_inr"], top)
+        ws.write(n, 10, r["cost_inr"], money)
+        if r.get("identify_cost") is not None:
+            ws.write(n, 11, r["identify_cost"], money)
+            ws.write(n, 12, r["scene_cost"], money)
+        ws.write(n, 13, r["total_cost"], money_b)
+        ws.write(n, 14, r.get("flow", ""), top)
+        ws.write(n, 15, r.get("category", ""), top)
+        ws.write(n, 16, r.get("subcategory", ""), top)
+        ws.write(n, 17, r.get("text_model", ""), top)
+        ws.write(n, 18, r.get("effort", ""), top)
+        ws.write(n, 19, cap(r.get("scene_description", "")), wrap)
+        ws.write(n, 20, cap(r.get("prompt_b", "")), wrap)
         for j, (k, _) in enumerate(REVIEW_FIELDS):
             v = rv.get(k, "")
-            ws.write(n, 11 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
-        ws.write(n, 11 + len(REVIEW_FIELDS), cap(rv.get("comment", "")), wrap)
-        ws.write(n, 12 + len(REVIEW_FIELDS), rv.get("updated", ""), top)
+            ws.write(n, A0 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
+        ws.write(n, A0 + len(REVIEW_FIELDS), cap(rv.get("comment", "")), wrap)
+        ws.write(n, A0 + 1 + len(REVIEW_FIELDS), rv.get("updated", ""), top)
     if out:
         ws.autofilter(0, 0, len(out), len(cols) - 1)
 
@@ -403,7 +444,7 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
     pct = wb.add_format({"num_format": "0%"})
     last = len(out) + 1
     for j, (k, label) in enumerate(REVIEW_FIELDS):
-        col = chr(ord("L") + j)                      # L.. = first answer column
+        col = xl_col_to_name(A0 + j)                 # first answer column onwards
         r_ = j + 1
         sm.write(r_, 0, label)
         sm.write_formula(r_, 1, f"=COUNTIF('Batch review'!{col}2:{col}{last},\"Yes\")")
