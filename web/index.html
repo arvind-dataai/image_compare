@@ -99,6 +99,57 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .tag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 10px;margin-left:8px;vertical-align:middle}
 .tag.ok{background:var(--ok);color:#fff}.tag.todo{background:none;border:1px solid var(--line);color:var(--mute);font-weight:600}
 .rv.locked .yn button{pointer-events:none}.rv.locked .yn button:not(.on){opacity:.35}.rv.locked textarea{opacity:.8}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:0 0 14px;background:var(--card)}
+.seg label{padding:7px 20px;cursor:pointer;font-weight:600;color:var(--mute);font-size:14px}
+.seg label:has(input:checked){background:var(--accent);color:var(--accent-ink)}
+.seg input{display:none}
+.hero-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 0 12px}
+.hero-t{font-size:18px;font-weight:700}
+button.big{font-size:16px;padding:12px 28px}
+button.ghost:disabled{opacity:.45;cursor:not-allowed}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 16px}
+@media (max-width:820px){.steps{grid-template-columns:1fr}}
+.stp{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.stp-h{display:flex;gap:10px;align-items:center}
+.stp-h b{font-size:15px}
+.num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--soft);color:var(--accent);font-weight:700;display:flex;align-items:center;justify-content:center}
+.pair{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.stp .msg:empty,.stp .est:empty{display:none}
+details.adv{padding:10px 16px}
+details.adv>summary{cursor:pointer;font-weight:600;font-size:14.5px}
+details.adv[open]>summary{margin-bottom:10px}
+.stepcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.stephead{display:flex;gap:10px;align-items:center;margin:0 0 12px}
+.stephead b{font-size:16px}
+.runrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0 0}
+.stepres{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.stepres>h3{margin:0 0 6px;font-size:14px;color:var(--mute)}
+.pr1{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px dashed var(--line)}
+.pr1:last-child{border-bottom:0}
+.pr1 figure{flex:none;width:72px}.pr1 figure.big{width:150px}
+.pr1 .body{flex:1;min-width:0}
+.pr1 .nm{font-size:12.5px;color:var(--mute)}
+.sf{margin:0 0 5px;font-size:14px}
+.viewseg{margin:0 0 14px}
+#bscene.allmode .stepcard{border:0;border-radius:0;margin:0;padding:14px 0;border-top:1px solid var(--line);background:none}
+#bscene.allmode .stepcard:first-of-type{border-top:0}
+#bscene.allmode #flow{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:2px 16px 16px;margin-bottom:16px}
+#bscene.allmode .stepcard .runrow,#bscene.allmode .stepres{display:none}
+#allrow{display:none;margin:4px 0 0}
+#bscene.allmode #allrow{display:flex}
+#scResults{display:none}
+#bscene.allmode #scResults{display:block}
+#bscene.allmode .stepcard.s3{padding-bottom:0}
+.hero-lite{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
+.hero-lite .t{font-weight:700;font-size:17px;margin-right:auto}
+.cc{text-align:right;color:var(--mute);font-size:12px;margin:2px 0 0}
+.hrow{display:flex;gap:14px;align-items:flex-start}
+.hth{flex:none;width:84px}
+.hb{flex:1;min-width:0}
+.hb .ht{font-weight:600;margin:4px 0 2px;overflow-wrap:anywhere}
+.hb .hm{color:var(--mute);font-size:13px}
+.hb .hm b{color:var(--ink)}
+.hb .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .hide{display:none}
 </style>
 </head>
@@ -110,6 +161,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <button data-tab="batch">Batch</button>
   <button data-tab="brev">Batch review</button>
   <button data-tab="lib">Scene library</button>
+  <button data-tab="hist">History</button>
 </nav>
 
 <!-- ============ NEW RUN ============ -->
@@ -152,78 +204,83 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 
 <!-- ============ BATCH ============ -->
 <section id="tab-batch" class="hide">
- <div class="card" style="padding:10px 16px">
-  <div class="opts">
-   <label class="opt"><input type="radio" name="bmode" value="scene" checked><div><b>Scene flow</b><span>Every photo is its own product: identify it, write a NEW scene that differs from earlier ones, then make its image</span></div></label>
-   <label class="opt"><input type="radio" name="bmode" value="direct"><div><b>Direct</b><span>Many separate images, one prompt, sent as typed</span></div></label>
-  </div>
- </div>
-
  <div id="bscene">
- <div class="card">
-  <div class="form">
-   <div>
-    <h2>1. Text model <span class="hint">(used for both steps)</span></h2>
-    <select id="sfmodel"></select>
-    <div class="form" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
-     <div><div class="sub">Identify effort</div><select id="sfe1"></select></div>
-     <div><div class="sub">Scene effort</div><select id="sfe2"></select></div>
-    </div>
-    <h2 style="margin-top:14px">2. Product photos <span class="hint">(each photo is treated as a separate product)</span></h2>
-    <label class="drop" id="sfdrop"><input type="file" id="sffile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
-      <div>Click or drop the photos here (PNG, JPEG, WEBP)</div></label>
-    <div id="sfthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
-    <div class="hint" id="sfsel"></div>
-    <h2 style="margin-top:14px">3. Prompt B <span class="hint">(yours: added after the scene description)</span></h2>
-    <textarea id="sfb" placeholder="e.g. premium look, vertical 4:5, no people"></textarea>
-    <h2 style="margin-top:10px">4. Size</h2><select id="sfsize"></select>
-    <h2 style="margin-top:10px">5. Name <span class="hint">(optional)</span></h2>
-    <input id="sfname" type="text" placeholder="e.g. red bangles" style="width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
-    <p class="hint">Image model is fixed: <b>gpt-image-2.5-sunburst</b>, quality <b>low</b>.</p>
-   </div>
-   <div>
-    <h2>Prompt A1: identify the product <button class="ghost" id="sfr1" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
-    <textarea id="sfa1" style="min-height:200px"></textarea>
-    <p class="hint">The system adds the list of known categories and the required reply format after this text.</p>
-    <h2 style="margin-top:12px">Prompt A2: write the new scene <button class="ghost" id="sfr2" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
-    <textarea id="sfa2" style="min-height:260px"></textarea>
-    <p class="hint">The system adds the product, your Prompt B, the earlier scenes of the same subcategory and the required reply format after this text.</p>
-   </div>
+ <div class="hero-lite">
+  <span class="t" id="scLabel">New run</span>
+  <span class="chip hide" id="scCost"></span>
+  <div class="seg viewseg" style="margin:0">
+   <label><input type="radio" name="sview" value="step" checked>Step by step</label>
+   <label><input type="radio" name="sview" value="all">All steps in one</label>
   </div>
-  <div class="go" style="margin-top:16px">
-   <button class="primary" id="sfrun" disabled>Start scene flow</button>
-   <span class="est" id="sfest"></span><span class="msg" id="sfmsg"></span>
-  </div>
- </div>
+  <button class="ghost" id="scNew">Start a new run</button>
  </div>
 
- <div id="bdirect" class="hide">
- <div class="card">
+ <div id="flow">
+ <div class="stepcard s1">
+  <div class="stephead"><span class="num">1</span><div><b>Step 1: Identify the product</b><div class="hint" style="margin:0">The AI looks at each photo and files it under a category and subcategory</div></div></div>
   <div class="form">
    <div>
-    <h2>1. Prompt <span class="hint">(sent exactly as typed to every image)</span></h2>
-    <textarea id="bprompt" style="min-height:200px" placeholder="Paste your prompt here"></textarea>
-    <div class="count"><span id="bcnt">0</span> characters</div>
-    <h2 style="margin-top:10px">2. Batch name <span class="hint">(optional)</span></h2>
-    <input id="bname" type="text" placeholder="e.g. universal prompt test" style="width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
-    <h2 style="margin-top:10px">3. Size</h2>
-    <select id="bsize"></select>
-    <p class="hint">Model is fixed: <b>gpt-image-2.5-sunburst</b>, quality <b>low</b>. No analysis step.</p>
+    <div id="scUpload">
+     <h2>Product photos <span class="hint">(each photo is its own product)</span></h2>
+     <label class="drop" id="sfdrop"><input type="file" id="sffile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+       <div>Click or drop the photos here (PNG, JPEG, WEBP)</div></label>
+     <div id="sfthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+     <div class="hint" id="sfsel"></div>
+     <input id="sfname" type="text" placeholder="Run name (optional), e.g. red bangles" style="margin-top:8px;width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    </div>
+    <div id="scHasRun" class="hint hide"></div>
+    <div class="pair" style="margin-top:10px"><div><div class="sub" style="margin:0 0 3px">Text model</div><select id="s1model"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select id="s1eff"></select></div></div>
    </div>
    <div>
-    <h2>4. Product images <span class="hint">(select many at once)</span></h2>
-    <label class="drop" id="bdrop"><input type="file" id="bfile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
-      <div>Click or drop several images here (PNG, JPEG, WEBP)</div></label>
-    <div id="bthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
-    <div class="hint" id="bsel"></div>
+    <h2>Prompt A1 <button class="ghost" id="s1reset" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea id="s1a1" style="min-height:220px"></textarea><div class="cc"><span id="cc_s1a1">0</span> characters</div>
+    <p class="hint">The system adds the list of known categories and the reply format after this text.</p>
    </div>
   </div>
-  <div class="go" style="margin-top:16px">
-   <button class="primary" id="brun" disabled>Start batch</button>
-   <span class="est" id="best"></span><span class="msg" id="bmsg"></span>
+  <div class="runrow"><button class="primary" id="s1run" disabled>Run step 1</button><span class="est" id="s1est"></span><span class="msg" id="s1msg"></span></div>
+  <div class="stepres hide" id="res1"></div>
+ </div>
+
+ <div class="stepcard s2">
+  <div class="stephead"><span class="num">2</span><div><b>Step 2: Write a new scene</b><div class="hint" style="margin:0">Uses the result of step 1 and the earlier scenes of that subcategory, so the scene is new</div></div></div>
+  <div class="form">
+   <div>
+    <div class="pair"><div><div class="sub" style="margin:0 0 3px">Text model</div><select id="s2model"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select id="s2eff"></select></div></div>
+    <p class="hint">The system gives the model the product (category, subcategory, description) and the earlier scenes. Prompt B is not used here.</p>
+   </div>
+   <div>
+    <h2>Prompt A2 <button class="ghost" id="s2reset" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea id="s2a2" style="min-height:220px"></textarea><div class="cc"><span id="cc_s2a2">0</span> characters</div>
+    <p class="hint">The system adds the product, the earlier scenes and the reply format after this text.</p>
+   </div>
   </div>
+  <div class="runrow"><button class="primary" id="s2run" disabled>Run step 2</button><span class="est" id="s2est"></span><span class="msg" id="s2msg"></span></div>
+  <div class="stepres hide" id="res2"></div>
  </div>
+
+ <div class="stepcard s3">
+  <div class="stephead"><span class="num">3</span><div><b>Step 3: Make the image</b><div class="hint" style="margin:0">gpt-image-2.5-sunburst, low. Prompt C = your Prompt B with the scene put at {SCENE}</div></div></div>
+  <div class="form">
+   <div>
+    <h2>Prompt B <span class="hint">(write <b>{SCENE}</b> where the scene description should go)</span></h2>
+    <textarea id="s3b" style="min-height:110px" placeholder="e.g. Make a premium advertisement.&#10;{SCENE}&#10;Vertical 4:5, no people."></textarea><div class="cc"><span id="cc_s3b">0</span> characters</div>
+    <p class="hint" style="margin:4px 0 0">No {SCENE} in your text? Then the scene is placed first and your text is added under it.</p>
+    <div class="sub" style="margin:8px 0 3px">Image size</div><select id="s3size"></select>
+   </div>
+   <div>
+    <h2>Prompt C that will be sent <span class="hint">(preview)</span></h2>
+    <div id="s3prev" class="hint">Run step 2 first. The scene plus your Prompt B will show here.</div>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="s3run" disabled>Run step 3</button><span class="est" id="s3est"></span><span class="msg" id="s3msg"></span></div>
+  <div class="stepres hide" id="res3"></div>
  </div>
+
+ <div class="go" id="allrow"><button class="primary big" id="scAll" disabled>Run all steps</button><span class="est">Runs step 1, 2 and 3 for every photo, one after the other. Or use the Run buttons in each step.</span></div>
+ </div>
+ <div id="scResults"></div>
+ </div>
+
  <div id="bdetail" class="hide card"></div>
  <h2 style="margin:18px 0 8px">Earlier batches</h2>
  <div id="blist"></div>
@@ -253,6 +310,23 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
  <div id="liblist"></div>
 </section>
 
+<!-- ============ HISTORY ============ -->
+<section id="tab-hist" class="hide">
+ <div class="card">
+  <div class="rvbar">
+   <div class="seg" style="margin:0">
+    <label><input type="radio" name="hfilter" value="all" checked>All</label>
+    <label><input type="radio" name="hfilter" value="single">Single runs</label>
+    <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
+   </div>
+   <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
+   <button class="ghost" id="hreload">Refresh</button>
+   <span class="tot" id="htot"></span>
+  </div>
+ </div>
+ <div id="hlist"></div>
+</section>
+
 </div>
 <div id="lb"><img alt=""></div>
 
@@ -271,8 +345,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","batch","brev","lib"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib();
+  ["new","batch","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
 });
 
 /* ---------- lightbox ---------- */
@@ -448,59 +522,13 @@ function rvApply(card,m){
   card.querySelector("[data-comment]").value=m.comment||"";
 }
 /* ================= BATCH ================= */
-let BOPT=null, bfiles=[], bpoll=null;
-async function binit(){
-  BOPT=await api("/api/batch/options");
-  $("#bsize").innerHTML=BOPT.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
-  $("#bfile").onchange=e=>{addBFiles(e.target.files);e.target.value=""};
-  const d=$("#bdrop");
-  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
-  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
-  d.addEventListener("drop",e=>addBFiles(e.dataTransfer.files));
-  $("#bprompt").oninput=bupdate; $("#bsize").onchange=bupdate;
-  bupdate();
-}
-function addBFiles(fl){
-  for(const f of fl){ if(!/^image\/(png|jpeg|webp)$/.test(f.type))continue;
-    if(!bfiles.some(x=>x.name===f.name&&x.size===f.size))bfiles.push(f); }
-  bthumbs(); bupdate();
-}
-function bthumbs(){
-  $("#bthumbs").innerHTML=bfiles.map((f,i)=>`<figure style="position:relative"><img style="cursor:default;aspect-ratio:1/1;object-fit:cover" src="${URL.createObjectURL(f)}" alt="" title="${esc(f.name)}"><button class="ghost" data-rm="${i}" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:12px;background:var(--card)">x</button></figure>`).join("");
-}
-$("#bthumbs").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;bfiles.splice(+b.dataset.rm,1);bthumbs();bupdate()});
-function bupdate(){
-  const n=bfiles.length, ok=$("#bprompt").value.trim().length>0;
-  $("#bcnt").textContent=$("#bprompt").value.length;
-  $("#bsel").textContent=n?`${n} image${n===1?"":"s"} selected (limit ${BOPT?BOPT.max_images:"..."})`:"No images selected yet.";
-  let est="";
-  if(n&&BOPT&&BOPT.est_inr_1024!=null){
-    const [w,h]=$("#bsize").value.split("x").map(Number);
-    est=`${n} image${n===1?"":"s"} · rough estimate <b>≈ ${inr(n*BOPT.est_inr_1024*w*h/1048576)}</b> (real cost is shown after)`;
-  }
-  const over=BOPT&&n>BOPT.max_images;
-  if(over)est+=` <span class="msg">Too many images (limit ${BOPT.max_images}).</span>`;
-  $("#best").innerHTML=est;
-  $("#brun").disabled=!(n&&ok)||over;
-}
-$("#brun").onclick=async()=>{
-  $("#bmsg").textContent=""; $("#brun").disabled=true;
-  const fd=new FormData();
-  bfiles.forEach(f=>fd.append("images",f)); fd.append("prompt",$("#bprompt").value.trim());
-  fd.append("size",$("#bsize").value); fd.append("name",$("#bname").value.trim());
-  try{
-    const {folder}=await api("/api/batch",{method:"POST",body:fd});
-    bfiles=[]; bthumbs(); bupdate();
-    showBatch(folder); loadBatches();
-  }catch(e){$("#bmsg").textContent=e.message; bupdate()}
-};
+let bpoll=null;
 function bchip(st){
-  const t={done:"done",running:"working...",queued:"waiting",error:"failed",interrupted:"interrupted"}[st]||st;
+  const t={done:"done",running:"working...",queued:"waiting",error:"failed",interrupted:"interrupted",ready:"waiting for next step"}[st]||st;
   return `<span class="chip ${st==="running"?"run":(st==="error"||st==="interrupted")?"bad":""}">${t}</span>`;
 }
 function showBatch(folder){
   clearTimeout(bpoll);
-  const box=$("#bdetail"); box.classList.remove("hide");
   const tick=async()=>{
     try{
       const j=await api("/api/batch/"+encodeURIComponent(folder));
@@ -513,6 +541,7 @@ function showBatch(folder){
 }
 function renderBatch(j){
   if(j.flow==="scene")return renderScene(j);
+  $("#bdetail").classList.remove("hide");
   const [w,h]=(j.size||"1088x1360").split("x").map(Number), f=encodeURIComponent(j.folder);
   const failed=j.items.filter(i=>i.status==="error").length;
   let html=`<div class="bar"><span class="tot">${esc(j.name||j.folder)} · ${esc(j.folder)}</span>${bchip(j.state)}
@@ -537,7 +566,7 @@ async function loadBatches(){
   try{
     const {batches}=await api("/api/batch");
     $("#blist").innerHTML=batches.length?batches.map(b=>`<div class="card run"><div class="folder">${esc(b.folder)} · ${esc(b.created)}</div>
-      <h3 class="pr">${b.flow==="scene"&&b.name==="Scene flow"?"":esc(b.name||"")}${b.flow==="scene"?` <span>${b.name==="Scene flow"?"":"· "}Scene flow${(b.categories||[]).length?` · ${b.categories.map(esc).join(", ").replace(/ &gt; /g," > ")}`:""}</span>`:""}</h3><div class="m">${bchip(b.state)} ${b.done}/${b.total} images${b.failed?` · <span class="err">${b.failed} failed</span>`:""} · cost <b>${inr(b.total_inr)}</b> · Prompt: ${esc(b.prompt.slice(0,120))}${b.prompt.length>120?"...":""}</div>
+      <h3 class="pr">${b.flow==="scene"&&b.name==="Scene flow"?"":esc(b.name||"")}${b.flow==="scene"?` <span>${b.name==="Scene flow"?"":"· "}Scene flow${(b.categories||[]).length?` · ${b.categories.map(esc).join(", ").replace(/ &gt; /g," > ")}`:""}</span>`:""}</h3><div class="m">${bchip(b.state)} ${b.done}/${b.total} images${b.failed?` · <span class="err">${b.failed} failed</span>`:""} · cost <b>${inr(b.total_inr)}</b> ${b.prompt?` · Prompt: ${esc(b.prompt.slice(0,120))}${b.prompt.length>120?"...":""}`:""}</div>
       <div class="links"><button class="ghost" data-open="${esc(b.folder)}">Open</button><a class="ghost" href="#" data-rev="${esc(b.folder)}">Review these</a></div></div>`).join(""):'<div class="card hint">No batches yet.</div>';
   }catch(e){$("#blist").innerHTML=`<div class="card err">${esc(e.message)}</div>`}
 }
@@ -621,102 +650,244 @@ $("#brlist").addEventListener("click",async e=>{
 });
 
 
-/* ================= SCENE FLOW ================= */
-let SOPT=null, sfiles=[];
+/* ================= SCENE FLOW (step by step) ================= */
+let SOPT=null, sfiles=[], SC={folder:null,job:null}, scTimer=null;
 const SCENE_LABELS={concept_name:"Concept",setting_environment:"Setting",surface_and_background:"Surface and background",product_presentation:"Product presentation",composition:"Composition",camera_angle_and_framing:"Camera",lighting:"Lighting",colour_palette:"Colour palette",props:"Props",mood_and_style:"Mood and style",keep_identical:"Keep identical",avoid:"Avoid",difference_from_previous:"Difference from previous scenes"};
-$$("input[name=bmode]").forEach(r=>r.onchange=()=>{
-  const sc=$("input[name=bmode]:checked").value==="scene";
-  $("#bscene").classList.toggle("hide",!sc); $("#bdirect").classList.toggle("hide",sc);
-});
+function ccUpdate(){["s1a1","s2a2","s3b"].forEach(t=>{const e=$("#cc_"+t);if(e)e.textContent=$("#"+t).value.length.toLocaleString("en-IN")})}
+["s1a1","s2a2","s3b"].forEach(t=>$("#"+t).addEventListener("input",ccUpdate));
+$$("input[name=sview]").forEach(r=>r.onchange=()=>$("#bscene").classList.toggle("allmode",$("input[name=sview]:checked").value==="all"));
+function fillModel(sel){
+  $(sel).innerHTML=SOPT.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
+  const first=SOPT.text_models.find(t=>t.available); if(first)$(sel).value=first.id;
+}
+function fillEff(modelSel,effSel,def){
+  const t=SOPT.text_models.find(x=>x.id===$(modelSel).value); if(!t)return;
+  const prev=$(effSel).value;
+  $(effSel).innerHTML=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
+  $(effSel).value=t.efforts.includes(prev)?prev:(t.efforts.includes(def)?def:t.efforts[0]);
+}
 async function sinit(){
   SOPT=await api("/api/scene/options");
-  $("#sfmodel").innerHTML=SOPT.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
-  const first=SOPT.text_models.find(t=>t.available); if(first)$("#sfmodel").value=first.id;
-  $("#sfsize").innerHTML=SOPT.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
-  $("#sfa1").value=SOPT.prompt_a1; $("#sfa2").value=SOPT.prompt_a2;
-  $("#sfr1").onclick=()=>{$("#sfa1").value=SOPT.prompt_a1}; $("#sfr2").onclick=()=>{$("#sfa2").value=SOPT.prompt_a2};
-  sefforts(); $("#sfmodel").onchange=()=>{sefforts();supdate()};
-  $("#sfe1").onchange=supdate; $("#sfe2").onchange=supdate; $("#sfsize").onchange=supdate;
+  fillModel("#s1model"); fillModel("#s2model"); fillEff("#s1model","#s1eff","low"); fillEff("#s2model","#s2eff","medium");
+  $("#s3size").innerHTML=SOPT.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  $("#s1a1").value=SOPT.prompt_a1; $("#s2a2").value=SOPT.prompt_a2; ccUpdate();
+  $("#s1reset").onclick=()=>{$("#s1a1").value=SOPT.prompt_a1;ccUpdate()}; $("#s2reset").onclick=()=>{$("#s2a2").value=SOPT.prompt_a2;ccUpdate()};
+  $("#s1model").onchange=()=>{fillEff("#s1model","#s1eff","low");scRefresh()}; $("#s2model").onchange=()=>{fillEff("#s2model","#s2eff","medium");scRefresh()};
+  ["#s1eff","#s2eff","#s3size"].forEach(i=>$(i).onchange=scRefresh);
+  ["#s1a1","#s2a2"].forEach(i=>$(i).addEventListener("input",scRefresh));
+  $("#s3b").addEventListener("input",()=>{scRefresh();clearTimeout(scTimer);scTimer=setTimeout(scPreview,350)});
   $("#sffile").onchange=e=>{addSFiles(e.target.files);e.target.value=""};
   const d=$("#sfdrop");
   ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
   ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
   d.addEventListener("drop",e=>addSFiles(e.dataTransfer.files));
-  supdate();
-}
-function sefforts(){
-  const t=SOPT.text_models.find(x=>x.id===$("#sfmodel").value); if(!t)return;
-  const opts=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
-  const p1=$("#sfe1").value, p2=$("#sfe2").value;
-  $("#sfe1").innerHTML=opts; $("#sfe2").innerHTML=opts;
-  $("#sfe1").value=t.efforts.includes(p1)?p1:(t.efforts.includes("low")?"low":t.efforts[0]);
-  $("#sfe2").value=t.efforts.includes(p2)?p2:(t.efforts.includes("medium")?"medium":t.efforts[0]);
+  scRefresh();
 }
 function addSFiles(fl){
   for(const f of fl){ if(!/^image\/(png|jpeg|webp)$/.test(f.type))continue;
     if(!sfiles.some(x=>x.name===f.name&&x.size===f.size))sfiles.push(f); }
   $("#sfthumbs").innerHTML=sfiles.map((f,i)=>`<figure style="position:relative"><img style="cursor:default;aspect-ratio:1/1;object-fit:cover" src="${URL.createObjectURL(f)}" alt="" title="${esc(f.name)}"><button class="ghost" data-rm="${i}" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:12px;background:var(--card)">x</button></figure>`).join("");
-  supdate();
+  scRefresh();
 }
 $("#sfthumbs").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;sfiles.splice(+b.dataset.rm,1);addSFiles([])});
-function supdate(){
+function scEst(step,n){
+  if(!SOPT||!n)return "";
+  const f=SOPT.usd_to_inr/1e6;
+  if(step===3){const [w,h]=$("#s3size").value.split("x").map(Number);return `${n} image${n===1?"":"s"} · rough estimate ≈ ${inr(n*SOPT.est_image_inr_1024*w*h/1048576)}`}
+  const t=SOPT.text_models.find(x=>x.id===$(step===1?"#s1model":"#s2model").value); if(!t)return "";
+  const e=$(step===1?"#s1eff":"#s2eff").value, k=step===1?"classify":"scene";
+  return `${n} call${n===1?"":"s"} · rough estimate ≈ ${inr(n*(SOPT.est_in[k]*t.rate_in+(SOPT.est_out[e]||0)*t.rate_out)*f)}`;
+}
+function scRefresh(){
   if(!SOPT)return;
-  const n=sfiles.length, t=SOPT.text_models.find(x=>x.id===$("#sfmodel").value);
-  $("#sfsel").textContent=n?`${n} photo${n===1?"":"s"} = ${n} separate product${n===1?"":"s"} (limit ${SOPT.max_photos})`:"No photos yet.";
-  let est="";
-  if(t&&n){
-    const e1=$("#sfe1").value,e2=$("#sfe2").value, f=SOPT.usd_to_inr/1e6;
-    const txt=(SOPT.est_in.classify*t.rate_in+(SOPT.est_out[e1]||0)*t.rate_out+SOPT.est_in.scene*t.rate_in+(SOPT.est_out[e2]||0)*t.rate_out)*f;
-    const [w,h]=$("#sfsize").value.split("x").map(Number), img=SOPT.est_image_inr_1024*w*h/1048576;
-    est=`${n} product${n===1?"":"s"}: ${2*n} text calls + ${n} image${n===1?"":"s"} · rough estimate <b>≈ ${inr(n*(txt+img))}</b> (real cost is shown after)`;
-  }
-  $("#sfest").innerHTML=est;
-  $("#sfrun").disabled=!(n&&t&&t.available&&n<=SOPT.max_photos&&$("#sfa1").value.trim()&&$("#sfa2").value.trim());
+  const j=SC.job, running=!!j&&j.state==="running", steps=j?j.items.map(i=>i.scene.step||0):[];
+  const n=j?j.items.length:sfiles.length;
+  const ok1=SOPT.text_models.find(x=>x.id===$("#s1model").value), ok2=SOPT.text_models.find(x=>x.id===$("#s2model").value);
+  const c1=steps.length||sfiles.length, c2=steps.filter(x=>x>=1).length, c3=steps.filter(x=>x>=2).length;
+  $("#s1run").disabled=running||!c1||!(ok1&&ok1.available)||!$("#s1a1").value.trim();
+  $("#s2run").disabled=running||!c2||!(ok2&&ok2.available)||!$("#s2a2").value.trim();
+  $("#s3run").disabled=running||!c3;
+  $("#scAll").disabled=running||!c1||!(ok1&&ok1.available)||!(ok2&&ok2.available);
+  $("#s1est").textContent=scEst(1,c1); $("#s2est").textContent=scEst(2,c2); $("#s3est").textContent=scEst(3,c3);
+  $("#sfsel").textContent=sfiles.length?`${sfiles.length} photo${sfiles.length===1?"":"s"} = ${sfiles.length} separate product${sfiles.length===1?"":"s"} (limit ${SOPT.max_photos})`:"No photos yet.";
+  $("#scUpload").classList.toggle("hide",!!j); $("#scHasRun").classList.toggle("hide",!j);
+  if(j){$("#scHasRun").innerHTML=`Run <b>${esc(j.folder)}</b> with <b>${j.items.length}</b> product${j.items.length===1?"":"s"}. Running a step again replaces its results and the later steps. Press <b>Start a new run</b> to use new photos.`;
+    $("#scLabel").textContent=`${j.name} · ${j.folder}`; $("#scCost").textContent="cost "+inr(j.total_inr); $("#scCost").classList.remove("hide");}
+  else{$("#scLabel").textContent="New run"; $("#scCost").classList.add("hide")}
 }
-["#sfa1","#sfa2","#sfb"].forEach(i=>$(i).addEventListener("input",supdate));
-$("#sfrun").onclick=async()=>{
-  $("#sfmsg").textContent=""; $("#sfrun").disabled=true;
+function scMsg(step,t){$("#s"+step+"msg").textContent=t||""}
+async function ensureRun(){
+  if(SC.folder)return SC.folder;
+  const fd=new FormData(); sfiles.forEach(f=>fd.append("images",f)); fd.append("name",$("#sfname").value.trim());
+  const {folder}=await api("/api/scene/create",{method:"POST",body:fd});
+  SC.folder=folder; sfiles=[]; addSFiles([]); return folder;
+}
+function stepForm(step){
   const fd=new FormData();
-  sfiles.forEach(f=>fd.append("images",f));
-  fd.append("text_model",$("#sfmodel").value); fd.append("effort_classify",$("#sfe1").value); fd.append("effort_scene",$("#sfe2").value);
-  fd.append("prompt_a1",$("#sfa1").value); fd.append("prompt_a2",$("#sfa2").value); fd.append("prompt_b",$("#sfb").value);
-  fd.append("size",$("#sfsize").value); fd.append("name",$("#sfname").value.trim());
-  try{
-    const {folder}=await api("/api/scene/run",{method:"POST",body:fd});
-    sfiles=[]; addSFiles([]); showBatch(folder); loadBatches();
-  }catch(e){$("#sfmsg").textContent=e.message; supdate()}
-};
-function renderScene(j){
-  const [w,h]=(j.size||"1088x1360").split("x").map(Number), f=encodeURIComponent(j.folder);
-  const running=j.state==="running", failed=j.items.filter(x=>x.status==="error").length;
-  const order={queued:-1,classify:0,scene:1,image:2,done:3};
-  let html=`<div class="bar"><span class="tot">${esc(j.name||j.folder)} · ${esc(j.folder)}</span>${bchip(j.state)}
-     <span class="chip">${j.done}/${j.total} products</span><span class="chip">cost ${inr(j.total_inr)}</span>
-     ${!running&&failed?`<button class="ghost" id="bretry">Retry ${failed} failed (from the failed step)</button>`:""}
-     <button class="ghost" id="bclose">Close</button></div>
-     <details class="box"><summary>Prompts used</summary><div class="hint">Text model ${esc(j.scene_cfg.text_model)} · identify effort ${esc(j.scene_cfg.effort_classify)} · scene effort ${esc(j.scene_cfg.effort_scene)}</div>
-     <b>Prompt A1</b><pre>${esc(j.scene_cfg.prompt_a1)}</pre><b>Prompt A2</b><pre>${esc(j.scene_cfg.prompt_a2)}</pre><b>Prompt B</b><pre>${esc(j.scene_cfg.prompt_b||"(none)")}</pre></details>`;
-  j.items.forEach((it,n)=>{
-    const s=it.scene||{}, cur=order[s.stage]??-1, live=running&&(it.status==="running"||it.status==="queued");
-    const chips=[["classify","1. Identify"],["scene","2. New scene"],["image","3. Image"]].map(([k,l],i)=>`<span class="chip ${live&&cur===i?"run":""}">${l}${cur>i?" ✓":live&&cur===i?" …":""}</span>`).join(" ");
-    html+=`<div class="card"><div class="bar" style="margin-bottom:8px"><span class="tot">Product ${n+1} · ${esc(it.orig_name)}</span>${chips}${it.status==="error"?'<span class="chip bad">failed</span>':it.status==="done"?'<span class="chip">done</span>':""}${it.cost_inr?`<span class="chip">image ${inr(it.cost_inr)}</span>`:""}</div>
-      <div class="top" style="grid-template-columns:150px 150px 1fr;gap:12px;margin:0">
-       <figure><img src="${esc(it.input_url)}" alt=""><figcaption>Input</figcaption></figure>
-       <div>${it.status==="done"&&it.url?`<figure><img src="${esc(it.url)}" alt=""><figcaption>Output</figcaption></figure>`:`<div class="ph" style="aspect-ratio:${w}/${h}">${it.status==="error"?"No image":'<div class="spin"></div>Waiting...'}</div>`}</div>
-       <div>${it.status==="error"?`<div class="err" style="margin-bottom:6px">${esc(it.error)}</div>`:""}
-       ${s.category?`<div style="margin-bottom:6px"><b style="font-size:16px">${esc(s.category)} &gt; ${esc(s.subcategory)}</b>
-         <span class="chip ${s.new_category?"run":""}">${s.new_category?"new category":"existing category"}</span>
-         <span class="chip ${s.new_subcategory?"run":""}">${s.new_subcategory?"new subcategory":"existing subcategory"}</span>
-         <div class="hint">${esc(s.product_description||"")}</div></div>`:""}
-       ${s.scene?`<div class="box"><details><summary>New scene (earlier scenes compared: ${s.previous_count||0})</summary>
-         <div style="padding:4px 0">${Object.entries(SCENE_LABELS).filter(([k])=>s.scene[k]).map(([k,l])=>`<div style="margin:0 0 6px"><b>${l}:</b> ${esc(s.scene[k])}</div>`).join("")}</div></details></div>`:""}
-       ${s.prompt_c?`<div class="box prompt"><details><summary>Prompt C given to the image model (scene + your Prompt B)</summary><pre>${esc(s.prompt_c)}</pre></details></div>`:""}
-       </div></div></div>`;
-  });
-  $("#bdetail").innerHTML=html;
-  const r=$("#bretry"); if(r)r.onclick=async()=>{try{await api(`/api/batch/${f}/retry`,{method:"POST"});showBatch(j.folder)}catch(e){alert(e.message)}};
-  $("#bclose").onclick=()=>{clearTimeout(bpoll);$("#bdetail").classList.add("hide")};
+  if(step===1){fd.append("prompt_a1",$("#s1a1").value);fd.append("text_model",$("#s1model").value);fd.append("effort",$("#s1eff").value)}
+  if(step===2){fd.append("prompt_a2",$("#s2a2").value);fd.append("text_model",$("#s2model").value);fd.append("effort",$("#s2eff").value)}
+  if(step===3){fd.append("prompt_b",$("#s3b").value);fd.append("size",$("#s3size").value)}
+  return fd;
 }
+function watch(folder){
+  return new Promise(res=>{
+    clearTimeout(bpoll);
+    const tick=async()=>{
+      try{const j=await api("/api/batch/"+encodeURIComponent(folder)); applyJob(j);
+        if(j.state==="running"){bpoll=setTimeout(tick,2000);return}
+        res(j);
+      }catch(e){bpoll=setTimeout(tick,3000)}
+    };
+    tick();
+  });
+}
+async function runStep(step,idx){
+  scMsg(1,""); scMsg(2,""); scMsg(3,"");
+  const folder=await ensureRun(), fd=stepForm(step);
+  if(idx!=null)fd.append("indexes",String(idx));
+  await api(`/api/scene/${folder}/step${step}`,{method:"POST",body:fd});
+  return watch(folder);
+}
+[1,2,3].forEach(st=>$("#s"+st+"run").onclick=async()=>{
+  try{$("#s"+st+"run").disabled=true; await runStep(st)}catch(e){scMsg(st,e.message)} scRefresh();
+});
+$("#scAll").onclick=async()=>{
+  try{ for(const st of [1,2,3]){ $("#scAll").disabled=true; const j=await runStep(st); if(j.items.some(i=>i.scene.error)){scMsg(st,"Stopped: a product failed in step "+st+". See the results below.");break} } }
+  catch(e){scMsg(1,e.message)}
+  scRefresh();
+};
+$("#scNew").onclick=()=>{clearTimeout(bpoll);SC={folder:null,job:null};sfiles=[];addSFiles([]);["#scResults","#res1","#res2","#res3"].forEach(x=>{$(x).innerHTML="";if(x!=="#scResults")$(x).classList.add("hide")});$("#s3prev").innerHTML="Run step 2 first. The scene plus your Prompt B will show here.";scRefresh()};
+async function scPreview(){
+  if(!SC.folder||!SC.job||!SC.job.items.some(i=>i.scene.scene_description))return;
+  try{
+    const {items}=await api(`/api/scene/${SC.folder}/promptc?prompt_b=`+encodeURIComponent($("#s3b").value));
+    $("#s3prev").innerHTML=items.length?items.map((x,n)=>`<details class="box" ${n===0?"open":""}><summary>Product ${x.index+1} · ${esc(x.name)}</summary><pre>${esc(x.prompt_c)}</pre></details>`).join(""):"No scene yet.";
+  }catch(e){}
+}
+function applyJob(j){
+  SC.folder=j.folder; SC.job=j;
+  $("#bdetail").classList.add("hide");
+  renderSceneResults(j); scRefresh(); scPreview();
+}
+function renderScene(j){applyJob(j)}
+function renderSceneResults(j){renderAllCards(j);renderStepResults(j)}
+function renderStepResults(j){
+  const running=j.state==="running", [w,h]=(j.size||"1088x1360").split("x").map(Number);
+  const rr=(k,n,label)=>`<button class="ghost" data-rerun="${k}:${n}" ${running?"disabled":""} style="padding:2px 10px;font-size:12.5px">${label}</button>`;
+  const th=(it,c="")=>`<figure class="${c}"><img src="${esc(it.input_url)}" alt=""></figure>`;
+  const wait=(s,k,t)=>s.running===k?`<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border-width:2px"></span> ${t}...</div>`
+      :s.error&&s.error_step===k?`<div class="err">Failed: ${esc(s.error)}</div>`:`<div class="hint">Not run yet.</div>`;
+  const hdr=(n,it)=>`<div class="nm">Product ${n+1} · ${esc(it.orig_name)}</div>`;
+  const r1=[],r2=[],r3=[];
+  j.items.forEach((it,n)=>{
+    const s=it.scene||{}, st=s.step||0, run=s.running||0;
+    const cost=(c)=>c?` <span class="chip">cost ${inr(c)}</span>`:"";
+    r1.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=1?
+      `<div><b style="font-size:16px">${esc(s.category)} &gt; ${esc(s.subcategory)}</b>
+        <span class="chip ${s.new_category?"run":""}">${s.new_category?"new category":"existing category"}</span>
+        <span class="chip ${s.new_subcategory?"run":""}">${s.new_subcategory?"new subcategory":"existing subcategory"}</span>${s.edited?' <span class="chip">edited by you</span>':""}${cost(s.classify_cost_inr)}</div>
+       <div style="margin:3px 0"><b>${s.existing_scenes||0}</b> existing scene description${(s.existing_scenes||0)===1?"":"s"} for this subcategory</div>
+       <div class="hint">${esc(s.product_description||"")}</div>${s.classify_reason?`<div class="hint">Why: ${esc(s.classify_reason)}</div>`:""}
+       <div class="hint">${esc((s.s1_cfg||{}).text_model||"")} · ${esc((s.s1_cfg||{}).effort||"")}</div>
+       <details style="margin-top:6px"><summary class="hint">Change category / subcategory</summary>
+        <div class="rvbar" style="margin-top:6px" data-catbox="${n}"><input type="text" value="${esc(s.category)}" data-c="cat" style="width:170px"><input type="text" value="${esc(s.subcategory)}" data-c="sub" style="width:170px">
+         <button class="ghost" data-catapply="${n}" ${running?"disabled":""}>Apply</button><span class="hint">Clears this product's scene and image.</span></div></details>
+       <div class="rvact">${rr(1,n,"Re-run step 1 for this product")}</div>`
+      :wait(s,1,"Identifying")+`<div class="rvact">${rr(1,n,"Run step 1 for this product")}</div>`)+`</div></div>`);
+    r2.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=2?
+      `<div class="hint">${esc((s.s2_cfg||{}).text_model||"")} · ${esc((s.s2_cfg||{}).effort||"")} · compared with <b>${s.previous_count||0}</b> earlier scene${(s.previous_count||0)===1?"":"s"}${cost(s.scene_cost_inr)}</div>
+       ${(s.previous||[]).length?`<details style="margin:4px 0"><summary class="hint">Earlier scenes it compared with</summary>${s.previous.map((p,k)=>`<div class="hint" style="margin:2px 0">${k+1}. ${esc(p.summary||p.concept)}</div>`).join("")}</details>`:""}
+       <div style="margin-top:6px">${Object.entries(SCENE_LABELS).filter(([k])=>s.scene&&s.scene[k]).map(([k,l])=>`<div class="sf"><b>${l}:</b> ${esc(s.scene[k])}</div>`).join("")}</div>
+       <div class="rvact">${rr(2,n,"Re-run step 2")}</div>`
+      :(st>=1?wait(s,2,"Writing the scene")+`<div class="rvact">${rr(2,n,"Run step 2 for this product")}</div>`:`<div class="hint">Run step 1 first.</div>`))+`</div></div>`);
+    r3.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=3&&it.url?
+      `<figure class="big" style="width:170px"><img src="${esc(it.url)}" alt=""><figcaption>Output${cost(it.cost_inr)}</figcaption></figure>
+       ${s.prompt_c?`<details style="margin-top:6px"><summary class="hint">Prompt C that was sent</summary><pre style="white-space:pre-wrap;font:inherit;font-size:13px">${esc(s.prompt_c)}</pre></details>`:""}
+       <div class="rvact">${rr(3,n,"Re-run step 3")}</div>`
+      :(st>=2?(run===3?`<div class="ph" style="aspect-ratio:${w}/${h};width:150px"><div class="spin"></div>Generating...</div>`:wait(s,3,"Generating")+`<div class="rvact">${rr(3,n,"Run step 3 for this product")}</div>`):`<div class="hint">Run step 2 first.</div>`))+`</div></div>`);
+  });
+  [[1,r1],[2,r2],[3,r3]].forEach(([k,arr])=>{const b=$("#res"+k); b.innerHTML=`<h3>Results</h3>`+arr.join(""); b.classList.remove("hide")});
+}
+function renderAllCards(j){
+  const [w,h]=(j.size||"1088x1360").split("x").map(Number), running=j.state==="running";
+  const html=j.items.map((it,n)=>{
+    const s=it.scene||{}, st=s.step||0, run=s.running||0;
+    const chip=(k,l)=>`<span class="chip ${run===k?"run":""} ${s.error&&s.error_step===k?"bad":""}">${l}${st>=k?" ✓":run===k?" …":""}</span>`;
+    const rerun=(k,label,ok)=>ok?`<button class="ghost" data-rerun="${k}:${n}" ${running?"disabled":""} style="padding:2px 10px;font-size:12.5px">${label}</button>`:"";
+    const cost=(it.cost_inr||0)+(s.classify_cost_inr||0)+(s.scene_cost_inr||0);
+    return `<div class="card"><div class="bar" style="margin-bottom:8px"><span class="tot">Product ${n+1} · ${esc(it.orig_name)}</span>
+      ${chip(1,"1 Identify")} ${chip(2,"2 Scene")} ${chip(3,"3 Image")}${cost?`<span class="chip">cost ${inr(cost)}</span>`:""}</div>
+      ${s.error?`<div class="err" style="margin-bottom:8px">Step ${s.error_step||""} failed: ${esc(s.error)}</div>`:""}
+      <div class="top" style="grid-template-columns:130px 130px 1fr;gap:12px;margin:0">
+       <figure><img src="${esc(it.input_url)}" alt=""><figcaption>Input</figcaption></figure>
+       <div>${st>=3&&it.url?`<figure><img src="${esc(it.url)}" alt=""><figcaption>Output</figcaption></figure>`:`<div class="ph" style="aspect-ratio:${w}/${h}">${run===3?'<div class="spin"></div>Generating...':"No image yet"}</div>`}</div>
+       <div>
+        ${st>=1?`<div class="box"><details open><summary>Step 1 · Identify <span class="hint">(${esc((s.s1_cfg||{}).text_model||"")} · ${esc((s.s1_cfg||{}).effort||"")})</span></summary>
+          <div style="padding:4px 0"><b style="font-size:16px">${esc(s.category)} &gt; ${esc(s.subcategory)}</b>
+           <span class="chip ${s.new_category?"run":""}">${s.new_category?"new category":"existing category"}</span>
+           <span class="chip ${s.new_subcategory?"run":""}">${s.new_subcategory?"new subcategory":"existing subcategory"}</span>${s.edited?' <span class="chip">edited by you</span>':""}
+           <div style="margin:4px 0"><b>${s.existing_scenes||0}</b> existing scene description${(s.existing_scenes||0)===1?"":"s"} for this subcategory</div>
+           <div class="hint">${esc(s.product_description||"")}</div>${s.classify_reason?`<div class="hint">Why: ${esc(s.classify_reason)}</div>`:""}
+           <details style="margin-top:6px"><summary class="hint">Change category / subcategory</summary>
+            <div class="rvbar" style="margin-top:6px" data-catbox="${n}"><input type="text" value="${esc(s.category)}" data-c="cat" style="width:170px"><input type="text" value="${esc(s.subcategory)}" data-c="sub" style="width:170px">
+             <button class="ghost" data-catapply="${n}" ${running?"disabled":""}>Apply</button><span class="hint">Clears this product's scene and image.</span></div></details></div></details></div>`:""}
+        ${st>=2?`<div class="box"><details><summary>Step 2 · New scene <span class="hint">(${esc((s.s2_cfg||{}).text_model||"")} · ${esc((s.s2_cfg||{}).effort||"")}) · compared with ${s.previous_count||0} earlier scene${(s.previous_count||0)===1?"":"s"}</span></summary>
+          ${(s.previous||[]).length?`<details style="margin:4px 0"><summary class="hint">Earlier scenes it compared with</summary>${s.previous.map((p,k)=>`<div class="hint" style="margin:2px 0">${k+1}. ${esc(p.summary||p.concept)}</div>`).join("")}</details>`:'<div class="hint">No earlier scene for this subcategory: this is the first.</div>'}
+          <div style="padding:4px 0">${Object.entries(SCENE_LABELS).filter(([k])=>s.scene&&s.scene[k]).map(([k,l])=>`<div style="margin:0 0 6px"><b>${l}:</b> ${esc(s.scene[k])}</div>`).join("")}</div></details></div>`:""}
+        ${s.prompt_c?`<div class="box prompt"><details><summary>Step 3 · Prompt C sent to the image model</summary><pre>${esc(s.prompt_c)}</pre></details></div>`:""}
+        <div class="rvact">${rerun(1,"Re-run step 1 for this product",true)}${rerun(2,"Re-run step 2",st>=1)}${rerun(3,"Re-run step 3",st>=2)}</div>
+       </div></div></div>`;
+  }).join("");
+  $("#scResults").innerHTML=html;
+}
+$("#bscene").addEventListener("click",async e=>{
+  const rr=e.target.closest("[data-rerun]");
+  if(rr){const [k,n]=rr.dataset.rerun.split(":").map(Number); try{await runStep(k,n)}catch(err){scMsg(k,err.message)} scRefresh(); return}
+  const ap=e.target.closest("[data-catapply]");
+  if(ap){const box=ap.closest("[data-catbox]"), n=+ap.dataset.catapply;
+    try{await api(`/api/scene/${SC.folder}/category`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({index:n,category:box.querySelector('[data-c=cat]').value,subcategory:box.querySelector('[data-c=sub]').value})});
+      applyJob(await api("/api/batch/"+encodeURIComponent(SC.folder)));
+    }catch(err){alert(err.message)}}
+});
+
+/* ================= HISTORY ================= */
+let HIST=[];
+function histShow(){
+  const f=$("input[name=hfilter]:checked").value, q=$("#hsearch").value.trim().toLowerCase();
+  const rows=HIST.filter(r=>(f==="all"||r.type===f)&&(!q||[r.title,r.folder,r.created,(r.categories||[]).join(" "),(r.models||[]).join(" ")].join(" ").toLowerCase().includes(q)));
+  const cost=rows.reduce((a,r)=>a+(r.cost_inr||0),0);
+  $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
+  $("#hlist").innerHTML=rows.length?rows.map(r=>{
+    const kind=r.type==="single"?"Single run":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const st=r.state;
+    const open=r.type==="single"?"single":"batch";
+    const more=r.type==="single"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+      ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
+    return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
+      <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
+       <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
+       <div class="hm">${esc(r.created)} · <b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div></div></div>`;
+  }).join(""):'<div class="card hint">No runs found.</div>';
+}
+async function loadHist(){
+  try{HIST=(await api("/api/history")).runs; histShow()}
+  catch(e){$("#hlist").innerHTML=`<div class="card err">${esc(e.message)}</div>`}
+}
+$$("input[name=hfilter]").forEach(r=>r.onchange=histShow);
+$("#hsearch").addEventListener("input",histShow);
+$("#hreload").onclick=loadHist;
+$("#hlist").addEventListener("click",e=>{
+  const o=e.target.closest("[data-hopen]");
+  if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
+    if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
+    else{$('nav button[data-tab="batch"]').click(); showBatch(folder)}
+    return}
+  const v=e.target.closest("[data-hrev]");
+  if(v){$('nav button[data-tab="brev"]').click(); $("#brbatch").value=v.dataset.hrev; loadBrev()}
+});
 
 /* ================= SCENE LIBRARY ================= */
 async function loadLib(){
@@ -729,7 +900,6 @@ async function loadLib(){
 }
 
 sinit().catch(e=>{$("#sfmsg").textContent="Could not load scene options: "+e.message});
-binit().catch(e=>{$("#bmsg").textContent="Could not load batch options: "+e.message});
 init().catch(e=>{$("#msg").textContent="Could not load: "+e.message});
 </script>
 </body>

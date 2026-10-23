@@ -209,14 +209,12 @@ Put `MODEL_API_KEY=...` in `.env` on the server (key from https://dev.meta.ai/ -
 greyed out. Meta charges a flat $0.01 per image and Muse has no quality levels, so it always makes one image per branch
 (labelled "standard") whatever qualities you tick. The size you pick only sets the aspect ratio; Meta decides the pixels.
 
-## Batch mode (one prompt x many images) and its own review sheet
+## Batch tab and its own review sheet
 
 Two extra tabs in the web page:
 
-* **Batch**: paste ONE prompt, pick many product images, press *Start batch*. Every image is made with
-  `gpt-image-2.5-sunburst`, quality `low`, with your prompt sent exactly as typed (no text model, no extra rules).
-  It runs in the background (3 at a time), shows progress and cost, and has *Retry failed*.
-  Results are saved in `outputs/batch_<n>_<name>/` (inputs `in_001_...`, outputs `out_001_...png`, plus `batch.json`).
+* **Batch**: the scene flow (see "Scene flow" below). The old "one prompt for many images" form was removed from the page;
+  its server code is still in `batch.py` (`POST /api/batch`) but nothing in the web page uses it.
 * **Batch review**: a separate review sheet (same 7 Yes/No questions + comment, Save / Edit review) saved in
   `batch_reviews.json`, with its own Excel download (`/batch_review.xlsx`). Each image shows its own cost (and the Excel has cost columns).
 
@@ -231,20 +229,20 @@ applied automatically; Spark $1.25 / $4.25; Wonder $4 / $20); thinking tokens ar
 
 ## Scene flow (Batch tab) and the Scene library
 
-Every uploaded photo is its **own product** and goes through the whole flow separately:
-**1. identify** (text model, prompt A1 + the known categories) -> category and subcategory, reusing an existing name whenever the product fits it;
-**2. new scene** (text model, prompt A2 + the earlier scenes of that subcategory + your Prompt B) -> a structured scene (setting, surface, camera, lighting,
-palette, props, mood, keep-identical, avoid ...) that must differ from the earlier ones;
-**3. image**: Prompt C = rendered scene + "Additional instructions:" + your Prompt B -> gpt-image-2.5-sunburst, low.
+Run in three steps, one at a time (or "Run all steps"). Every uploaded photo is its **own product**; each step shows its result before you start the next.
 
-* Order inside one run: all photos are identified first. Photos that land in the same subcategory are then done one after the other
-  (each new scene sees the scenes just written for the earlier photos); different subcategories run in parallel.
-* Prompts A1 and A2 are in `scene_classify_prompt.txt` and `scene_write_prompt.txt`; the page shows them in editable boxes (with Reset to default).
-  The code adds the data blocks (known categories, earlier scenes, required JSON format) after them.
-* Scenes are saved in `scene_library.json` (category > subcategory > scenes, each with a timestamp, status, output image).
-  A scene whose image failed is marked `failed` and does not count as "used". Back this file up; it is the memory of the flow.
-* Retry continues each failed product from the step that failed (finished steps are not paid for twice). Results appear in the Batch review tab and its Excel.
-* Code: `sceneflow.py` (the steps), `scene_library.py` (storage and name matching). Limit: `WEB_BATCH_MAX` photos per run (default 100).
+1. **Identify**: Prompt A1 + the known categories + a text model and effort -> category and subcategory (an existing name is reused whenever the
+   product fits; otherwise a new one is created), and how many scene descriptions already exist for that subcategory. You can change the category
+   or subcategory by hand (this clears that product's scene and image).
+2. **Scene**: Prompt A2 + the product + the earlier scenes of that subcategory + a text model and effort -> a NEW structured scene that must differ
+   from the earlier ones. Prompt B is not used here. Photos in the same subcategory are done one after the other, so each sees the scene written for the one before.
+3. **Image**: Prompt C = your Prompt B with the scene description put where you wrote `{SCENE}` (if Prompt B has no `{SCENE}`, the scene comes first and Prompt B is added under it as "Additional instructions:"); the result is shown before you run -> gpt-image-2.5-sunburst, low.
 
+* Each step can be re-run for one product (its later steps are cleared). A replaced scene no longer counts as "used" in the library.
+* Prompts A1 and A2 are in `scene_classify_prompt.txt` and `scene_write_prompt.txt` and shown in editable boxes (Reset to default). The code adds the data blocks
+  (known categories, earlier scenes, required JSON format) after them, so if the reply fields change, `sceneflow.py` (`SCENE_FORMAT`, `scene_library.SCENE_FIELDS`) must change too.
+* Scenes are saved in `scene_library.json` (category > subcategory > scenes with timestamps; status pending / done / failed / replaced). Back this file up.
+* Results stay saved between steps: close the page and open the run again from the Batch list. Finished images appear in Batch review (with their cost) and its Excel.
+* Code: `sceneflow.py` (steps and API), `scene_library.py` (storage and name matching). Limit: `WEB_BATCH_MAX` photos per run (default 100).
 
-Note: the page now has four tabs: New run, Batch, Batch review and Scene library. The old History, Review and Cost log tabs were removed.
+Note: the page has five tabs: New run, Batch, Batch review, Scene library and History. History lists every single run and batch run, newest first, with a filter, a search box and an Open button for each (`GET /api/history`). The old Review and Cost log tabs were removed.

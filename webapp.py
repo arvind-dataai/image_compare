@@ -389,6 +389,55 @@ def run_status(folder: str):
             "input_url": f"/outputs/{folder}/{d['input']}", "branches": branches}
 
 
+def _ts(text: str, fallback: float = 0.0) -> float:
+    try:
+        return datetime.strptime(text, "%d %b %Y, %H:%M").timestamp()
+    except Exception:
+        return fallback
+
+
+@router.get("/api/history")
+def history():
+    """Every run in one list, newest first: single runs from the New run tab and batch runs (scene flow or older direct batches)."""
+    import batch                                  # imported here because batch imports main, which imports this module
+    rows = []
+    for p in core.OUTPUT_DIR.iterdir():
+        if not (p.is_dir() and re.match(r"^\d+_", p.name)):
+            continue
+        d, job = _run_json(p.name), JOBS.get(p.name)
+        if d is None and not job:
+            continue
+        mtime = p.stat().st_mtime
+        when = (d or {}).get("time") or datetime.fromtimestamp(mtime).strftime("%d %b %Y, %H:%M")
+        if d is not None:
+            branches = d.get("branches") or [{"items": d.get("items", [])}]
+            items = [it for b in branches for it in b.get("items", [])]
+            texts = [f"{b['text_model']} ({b.get('effort', '')})" for b in branches if b.get("text_model")]
+            models = list(dict.fromkeys(f"{it['model']} {it.get('quality') or ''}".strip() for it in items if it.get("model")))
+            state = "running" if job and job.get("state") == "running" else "done"
+            rows.append({
+                "type": "single", "flow": None, "folder": p.name, "created": when, "ts": _ts(when, mtime),
+                "title": (d.get("meta") or {}).get("Prompt") or d.get("title", ""), "state": state,
+                "thumb": f"/outputs/{p.name}/{d['input']}" if d.get("input") else "",
+                "images_total": len(items), "images_done": sum(1 for it in items if it.get("file")),
+                "failed": sum(1 for it in items if not it.get("file") and it.get("error")),
+                "cost_inr": d.get("total_inr", 0), "models": texts + models, "categories": []})
+        else:                                     # started since the server booted, not finished yet
+            rows.append({
+                "type": "single", "flow": None, "folder": p.name, "created": when, "ts": mtime,
+                "title": job.get("prompt", ""), "state": job.get("state", "running"), "thumb": "",
+                "images_total": 0, "images_done": 0, "failed": 0, "cost_inr": job.get("total_inr", 0),
+                "models": [], "categories": []})
+    for b in batch.batch_list()["batches"]:
+        rows.append({
+            "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],
+            "ts": _ts(b["created"], 0.0), "title": b["name"] or b["prompt"], "state": b["state"],
+            "thumb": b.get("thumb", ""), "images_total": b["total"], "images_done": b["done"], "failed": b["failed"],
+            "cost_inr": b["total_inr"], "models": [], "categories": b["categories"]})
+    rows.sort(key=lambda r: -r["ts"])
+    return {"runs": rows}
+
+
 @router.get("/api/runs/{folder}/zip")
 def run_zip(folder: str):
     run_dir = _check_folder(folder)

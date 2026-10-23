@@ -102,8 +102,9 @@ def _view(job: dict) -> dict:
     f = job["folder"]
     with _LOCK:
         out = copy.deepcopy(job)
-    out["items"] = [dict(it, input_url=f"/outputs/{f}/{it['input']}",
-                         url=(f"/outputs/{f}/{it['file']}" if it.get("file") else None)) for it in job["items"]]
+    for it in out["items"]:
+        it["input_url"] = f"/outputs/{f}/{it['input']}"
+        it["url"] = f"/outputs/{f}/{it['file']}" if it.get("file") else None
     return out
 
 
@@ -157,6 +158,17 @@ def _load(folder: str) -> dict:
     data = _read(folder)
     if not data:
         raise HTTPException(404, "Batch not found.")
+    if data.get("flow") == "scene":                  # step-by-step run: a step that was running is shown as failed
+        from sceneflow import sync
+        if data.get("state") == "running":
+            data["state"] = "ready"
+        for it in data["items"]:
+            sc = it["scene"]
+            if sc.get("running"):
+                sc["error"], sc["running"] = f"Interrupted: the server restarted during step {sc['running']}. Run it again.", 0
+            sync(it)
+        _count(data)
+        return data
     if data.get("state") == "running":
         data["state"] = "interrupted"
         for it in data["items"]:
@@ -221,11 +233,14 @@ def batch_list():
             continue
         cats = list(dict.fromkeys(f"{(x.get('scene') or {}).get('category')} > {(x.get('scene') or {}).get('subcategory')}"
                                   for x in j["items"] if (x.get("scene") or {}).get("category")))
-        out.append({"folder": f, "state": j["state"], "name": j.get("name", ""), "created": j.get("created", ""),
+        state = "done" if (j.get("flow") == "scene" and j["state"] == "ready" and j["items"]
+                           and all(x["status"] == "done" for x in j["items"])) else j["state"]
+        out.append({"folder": f, "state": state, "name": j.get("name", ""), "created": j.get("created", ""),
                     "flow": j.get("flow", "direct"), "categories": cats,
                     "prompt": j["prompt"], "total": j["total"], "done": j.get("done", 0),
                     "failed": sum(1 for it in j["items"] if it["status"] == "error"),
-                    "total_inr": j.get("total_inr", 0)})
+                    "total_inr": j.get("total_inr", 0),
+                    "thumb": f"/outputs/{f}/{j['items'][0]['input']}" if j["items"] else ""})
     return {"batches": out}
 
 
@@ -242,12 +257,8 @@ def batch_retry(folder: str):
     if folder in BJOBS and BJOBS[folder]["state"] == "running":
         raise HTTPException(400, "This batch is still running.")
     BJOBS[folder] = job                              # adopt a saved (finished / interrupted) batch
-    if job.get("flow") == "scene":                   # scene flow: continue each failed product from the step that failed
-        from sceneflow import retry_scene_flow
-        n = retry_scene_flow(folder, job)
-        if not n:
-            raise HTTPException(400, "Nothing to retry: every image is done.")
-        return {"folder": folder, "retrying": n}
+    if job.get("flow") == "scene":
+        raise HTTPException(400, "Scene-flow runs are continued with the step buttons.")
     bad = [i for i, it in enumerate(job["items"]) if it["status"] != "done"]
     if not bad:
         raise HTTPException(400, "Nothing to retry: every image is done.")
@@ -279,10 +290,12 @@ def _rows(folders: list) -> list:
             continue
         for it in j["items"]:
             if it.get("status") == "done" and it.get("file"):
-                sc, cfg = it.get("scene") or {}, j.get("scene_cfg") or {}
+                sc = it.get("scene") or {}
+                c1, c2 = sc.get("s1_cfg") or {}, sc.get("s2_cfg") or {}
                 extra = ({"flow": "scene", "category": sc.get("category", ""), "subcategory": sc.get("subcategory", ""),
-                          "text_model": cfg.get("text_model", ""), "effort": f"{cfg.get('effort_classify', '')} / {cfg.get('effort_scene', '')}",
-                          "scene_description": sc.get("scene_description", ""), "prompt_b": cfg.get("prompt_b", ""),
+                          "text_model": c1.get("text_model", "") if c1.get("text_model") == c2.get("text_model") else f"{c1.get('text_model', '')} / {c2.get('text_model', '')}",
+                          "effort": f"{c1.get('effort', '')} / {c2.get('effort', '')}",
+                          "scene_description": sc.get("scene_description", ""), "prompt_b": sc.get("prompt_b", ""),
                           "new_category": sc.get("new_category"), "new_subcategory": sc.get("new_subcategory"),
                           "previous_count": sc.get("previous_count", 0)}
                          if j.get("flow") == "scene" else {"flow": "direct"})

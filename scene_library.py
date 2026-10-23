@@ -10,7 +10,7 @@ File layout (human readable, safe to open in any editor):
      "subcategories": {
        "Bangles": {
          "scenes": [
-           {"id": "a1b2c3d4", "created": "2026-10-23T15:40:12", "status": "done" | "pending" | "failed",
+           {"id": "a1b2c3d4", "created": "2026-10-23T15:40:12", "status": "done" | "pending" | "failed" | "replaced",
             "folder": "batch_3_...", "file": "out_001_....png", "input": "in_001_....jpg",
             "text_model": "...", "effort": "...", "prompt_b": "...",
             "scene": {...structured fields written by the text model...},
@@ -42,8 +42,6 @@ SCENE_FIELDS = [
     ("colour_palette", "COLOUR PALETTE"),
     ("props", "PROPS"),
     ("mood_and_style", "MOOD AND STYLE"),
-    ("keep_identical", "KEEP IDENTICAL"),
-    ("avoid", "AVOID"),
 ]
 SCENE_KEYS = [k for k, _ in SCENE_FIELDS]
 CLASSIFY_KEYS = ["category", "subcategory", "product_description"]
@@ -120,11 +118,11 @@ def summary_of(scene: dict) -> str:
 
 
 def previous(category: str, subcategory: str, limit: int = 40) -> list:
-    """Scenes already used for this subcategory (newest last). Failed ones do not count as used."""
+    """Scenes already used for this subcategory (newest last). Failed and replaced ones do not count as used."""
     with _LOCK:
         d = _load()
     sc = d["categories"].get(category, {}).get("subcategories", {}).get(subcategory, {}).get("scenes", [])
-    return [s for s in sc if s.get("status") != "failed"][-limit:]
+    return [s for s in sc if s.get("status") not in ("failed", "replaced")][-limit:]
 
 
 def add_scene(category: str, subcategory: str, entry: dict) -> str:
@@ -193,7 +191,11 @@ def render_scene(category: str, subcategory: str, product_description: str, scen
 
 
 def build_prompt_c(scene_description: str, prompt_b: str) -> str:
+    """Prompt C. If Prompt B contains the placeholder {SCENE}, the scene description goes exactly there.
+    Without the placeholder, Prompt B is added under the scene description (the old behaviour)."""
     prompt_b = (prompt_b or "").strip()
+    if re.search(r"\{\s*scene\s*\}", prompt_b, flags=re.I):
+        return re.sub(r"\{\s*scene\s*\}", lambda m: scene_description, prompt_b, flags=re.I)
     return scene_description + (f"\n\nAdditional instructions:\n{prompt_b}" if prompt_b else "")
 
 
