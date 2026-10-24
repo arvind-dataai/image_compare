@@ -433,7 +433,8 @@ def history():
             "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],
             "ts": _ts(b["created"], 0.0), "title": b["name"] or b["prompt"], "state": b["state"],
             "thumb": b.get("thumb", ""), "images_total": b["total"], "images_done": b["done"], "failed": b["failed"],
-            "cost_inr": b["total_inr"], "models": [], "categories": b["categories"]})
+            "cost_inr": b["total_inr"], "models": [], "categories": b["categories"],
+            "products": b.get("products", 0), "scene_runs": b.get("scene_runs", 0), "image_runs": b.get("image_runs", 0)})
     rows.sort(key=lambda r: -r["ts"])
     return {"runs": rows}
 

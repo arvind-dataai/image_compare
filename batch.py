@@ -159,10 +159,11 @@ def _load(folder: str) -> dict:
     if not data:
         raise HTTPException(404, "Batch not found.")
     if data.get("flow") == "scene":                  # step-by-step run: a step that was running is shown as failed
-        from sceneflow import sync
+        from sceneflow import _migrate, sync
         if data.get("state") == "running":
             data["state"] = "ready"
         for it in data["items"]:
+            _migrate(it)
             sc = it["scene"]
             if sc.get("running"):
                 sc["error"], sc["running"] = f"Interrupted: the server restarted during step {sc['running']}. Run it again.", 0
@@ -240,7 +241,10 @@ def batch_list():
                     "prompt": j["prompt"], "total": j["total"], "done": j.get("done", 0),
                     "failed": sum(1 for it in j["items"] if it["status"] == "error"),
                     "total_inr": j.get("total_inr", 0),
-                    "thumb": f"/outputs/{f}/{j['items'][0]['input']}" if j["items"] else ""})
+                    "thumb": f"/outputs/{f}/{j['items'][0]['input']}" if j["items"] else "",
+                    "products": len(j["items"]),
+                    "scene_runs": sum(1 for x in j["items"] for r in (x.get("scene") or {}).get("runs2", []) if r.get("scene")),
+                    "image_runs": sum(len((x.get("scene") or {}).get("runs3", [])) for x in j["items"])})
     return {"batches": out}
 
 
@@ -283,31 +287,77 @@ def _is_reviewed(rec: dict) -> bool:
 
 
 def _rows(folders: list) -> list:
+    """One row per output image. A scene-flow product can have several (one per image run), each with the
+    model, effort and prompts of the scene run it came from and its own cost."""
     out = []
     for f in folders:
         j = _read(f)
         if not j:
             continue
+        if j.get("flow") == "scene":
+            from sceneflow import _migrate
+            for it in j["items"]:
+                _migrate(it)
+                sc = it.get("scene") or {}
+                r2s = {r["n"]: r for r in sc.get("runs2", [])}
+                c1 = sc.get("s1_cfg") or {}
+                for r3 in sc.get("runs3", []):
+                    if not (core.OUTPUT_DIR / f / r3["file"]).is_file():
+                        continue
+                    r2 = r2s.get(r3.get("scene_n")) or {}
+                    idc, scc, imc = sc.get("classify_cost_inr") or 0, r2.get("cost_inr") or 0, r3.get("cost_inr") or 0
+                    out.append({"flow": "scene", "folder": f, "name": j.get("name", ""), "time": r3.get("created") or j.get("created", ""),
+                                "prompt": r3.get("prompt_c", ""), "size": r3.get("size") or j["size"],
+                                "model": j.get("model", BATCH_MODEL), "quality": j.get("quality", BATCH_QUALITY),
+                                "input": it["input"], "orig_name": it.get("orig_name", ""), "file": r3["file"],
+                                "cost_inr": imc, "identify_cost": idc, "scene_cost": scc, "total_cost": round(idc + scc + imc, 4),
+                                "category": r2.get("category") or sc.get("category", ""), "subcategory": r2.get("subcategory") or sc.get("subcategory", ""),
+                                "identify_model": c1.get("text_model", ""), "identify_effort": c1.get("effort", ""),
+                                "scene_model": r2.get("text_model", ""), "scene_effort": r2.get("effort", ""),
+                                "scene_run": r3.get("scene_n"), "image_run": r3.get("n"),
+                                "scene_description": r2.get("scene_description", ""), "prompt_b": r3.get("prompt_b", ""),
+                                "previous_count": r2.get("previous_count", 0),
+                                "new_category": sc.get("new_category"), "new_subcategory": sc.get("new_subcategory")})
+            continue
         for it in j["items"]:
             if it.get("status") == "done" and it.get("file"):
-                sc = it.get("scene") or {}
-                c1, c2 = sc.get("s1_cfg") or {}, sc.get("s2_cfg") or {}
-                extra = ({"flow": "scene", "category": sc.get("category", ""), "subcategory": sc.get("subcategory", ""),
-                          "text_model": c1.get("text_model", "") if c1.get("text_model") == c2.get("text_model") else f"{c1.get('text_model', '')} / {c2.get('text_model', '')}",
-                          "effort": f"{c1.get('effort', '')} / {c2.get('effort', '')}",
-                          "scene_description": sc.get("scene_description", ""), "prompt_b": sc.get("prompt_b", ""),
-                          "new_category": sc.get("new_category"), "new_subcategory": sc.get("new_subcategory"),
-                          "previous_count": sc.get("previous_count", 0)}
-                         if j.get("flow") == "scene" else {"flow": "direct"})
-                out.append({**extra, "folder": f, "name": j.get("name", ""), "time": j.get("created", ""),
-                            "prompt": sc.get("prompt_c") if j.get("flow") == "scene" else j["prompt"],
-                            "size": j["size"], "model": j.get("model", BATCH_MODEL), "quality": j.get("quality", BATCH_QUALITY),
-                            "input": it["input"], "orig_name": it.get("orig_name", ""), "file": it["file"],
-                            "cost_inr": it.get("cost_inr", 0),
-                            "identify_cost": sc.get("classify_cost_inr") if j.get("flow") == "scene" else None,
-                            "scene_cost": sc.get("scene_cost_inr") if j.get("flow") == "scene" else None,
-                            "total_cost": round((it.get("cost_inr") or 0) + (sc.get("classify_cost_inr") or 0)
-                                                + (sc.get("scene_cost_inr") or 0), 4)})
+                out.append({"flow": "direct", "folder": f, "name": j.get("name", ""), "time": j.get("created", ""),
+                            "prompt": j["prompt"], "size": j["size"], "model": j.get("model", BATCH_MODEL),
+                            "quality": j.get("quality", BATCH_QUALITY), "input": it["input"], "orig_name": it.get("orig_name", ""),
+                            "file": it["file"], "cost_inr": it.get("cost_inr", 0), "identify_cost": None, "scene_cost": None,
+                            "total_cost": round(it.get("cost_inr") or 0, 4)})
+    return out
+
+
+def _iter_rows(folders: list) -> list:
+    """Every identify, scene and image run of the scene-flow batches, each with its own cost (the 'Iterations' sheet)."""
+    out = []
+    for f in folders:
+        j = _read(f)
+        if not j or j.get("flow") != "scene":
+            continue
+        from sceneflow import _migrate
+        for it in j["items"]:
+            _migrate(it)
+            sc = it.get("scene") or {}
+            who = it.get("orig_name", "")
+            cat = f"{sc.get('category')} > {sc.get('subcategory')}" if sc.get("category") else ""
+            c1 = sc.get("s1_cfg") or {}
+            if c1 or sc.get("classify_cost_inr"):
+                out.append({"folder": f, "product": who, "step": "1 Identify", "n": 1, "created": "", "category": cat,
+                            "model": c1.get("text_model", ""), "setting": c1.get("effort", ""), "prompt": "",
+                            "result": sc.get("product_description", ""), "file": "", "cost": sc.get("classify_cost_inr") or 0, "status": "ok"})
+            for r in sc.get("runs2", []):
+                out.append({"folder": f, "product": who, "step": "2 Scene", "n": r["n"], "created": r.get("created", ""),
+                            "category": f"{r.get('category')} > {r.get('subcategory')}", "model": r.get("text_model", ""),
+                            "setting": r.get("effort", ""), "prompt": r.get("prompt_a2", ""),
+                            "result": r.get("error") or r.get("scene_description", ""), "file": "", "cost": r.get("cost_inr") or 0,
+                            "status": "failed" if r.get("error") else ("selected for step 3" if r["n"] == sc.get("sel2") else "ok")})
+            for r in sc.get("runs3", []):
+                out.append({"folder": f, "product": who, "step": "3 Image", "n": r["n"], "created": r.get("created", ""),
+                            "category": cat, "model": j.get("model", BATCH_MODEL), "setting": r.get("size", ""),
+                            "prompt": r.get("prompt_c", ""), "result": f"made from scene run #{r.get('scene_n')}",
+                            "file": r.get("file", ""), "cost": r.get("cost_inr") or 0, "status": "ok"})
     return out
 
 
@@ -385,19 +435,26 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
     cap = lambda t: (lambda s: s if len(s) <= 32000 else s[:32000] + " ...[cut]")(str(t or ""))
 
     ws = wb.add_worksheet("Batch review")
-    cols = [("Batch id", 24), ("Date", 17), ("Input image", 24), ("Input file", 22), ("Prompt given to the image model", 60), ("Image model", 22),
-            ("Quality", 9), ("Size", 11), ("Output image", 24), ("Output link", 14), ("Image cost (INR)", 11),
-            ("Identify cost (INR)", 11), ("Scene cost (INR)", 11), ("Total cost (INR)", 11),
-            ("Flow", 9), ("Category", 16), ("Subcategory", 18), ("Text model", 16), ("Effort (identify / scene)", 14),
-            ("Scene description", 60), ("Prompt B (yours)", 40)]
+    cols = [("folder", "Batch id", 24), ("time", "Date", 17), ("@in", "Input image", 24), ("orig_name", "Input file", 22),
+            ("prompt", "Prompt given to the image model", 60), ("model", "Image model", 22), ("quality", "Quality", 9),
+            ("size", "Size", 11), ("@out", "Output image", 24), ("@link", "Output link", 14),
+            ("cost_inr", "Image cost (INR)", 11), ("identify_cost", "Identify cost (INR)", 11), ("scene_cost", "Scene cost (INR)", 11),
+            ("total_cost", "Cost of this image: identify + its scene run + image (INR)", 17),
+            ("flow", "Flow", 9), ("category", "Category", 16), ("subcategory", "Subcategory", 18),
+            ("identify_model", "Identify model", 16), ("identify_effort", "Identify effort", 11),
+            ("scene_model", "Scene model", 16), ("scene_effort", "Scene effort", 11),
+            ("scene_run", "Scene run #", 9), ("image_run", "Image run #", 9),
+            ("scene_description", "Scene description", 60), ("prompt_b", "Prompt B (yours)", 40)]
+    C = {k: i for i, (k, _, _) in enumerate(cols)}
     A0 = len(cols)                                   # first answer column
-    cols += [(l, 15) for _, l in REVIEW_FIELDS] + [("Comment", 40), ("Reviewed at", 17)]
-    for i, (t, w) in enumerate(cols):
+    cols += [(None, l, 15) for _, l in REVIEW_FIELDS] + [(None, "Comment", 40), (None, "Reviewed at", 17)]
+    for i, (_, t, w) in enumerate(cols):
         ws.write(0, i, t, hdr)
         ws.set_column(i, i, w)
-    ws.set_row(0, 46)
+    ws.set_row(0, 58)
     ws.freeze_panes(1, 1)
     ROW_PX = 190
+    money_keys, wrap_keys = {"cost_inr", "identify_cost", "scene_cost"}, {"prompt", "scene_description", "prompt_b"}
 
     def put_image(r, c, path):
         sz = _png_size(path)
@@ -410,37 +467,23 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
 
     for n, (r, rv) in enumerate(out, start=1):
         ws.set_row(n, ROW_PX * 0.75 + 6 if pictures else 90)
-        ws.write(n, 0, r["folder"], top)
-        ws.write(n, 1, r["time"], top)
+        for k, c in C.items():
+            v = r.get(k)
+            if k.startswith("@") or v is None or v == "":
+                continue
+            ws.write(n, c, cap(v) if k in wrap_keys else v, money if k in money_keys else money_b if k == "total_cost" else wrap if k in wrap_keys else top)
         in_path = core.OUTPUT_DIR / r["folder"] / r["input"]
         if pictures and in_path.is_file():
-            if not put_image(n, 2, in_path):
-                ws.write(n, 2, r["input"], top)
+            if not put_image(n, C["@in"], in_path):
+                ws.write(n, C["@in"], r["input"], top)
         elif base:
-            ws.write_url(n, 2, f"{base}/outputs/{r['folder']}/{r['input']}", link, "open input")
-        ws.write(n, 3, r["orig_name"], top)
-        ws.write(n, 4, cap(r["prompt"]), wrap)
-        ws.write(n, 5, r["model"], top)
-        ws.write(n, 6, r["quality"], top)
-        ws.write(n, 7, r["size"], top)
+            ws.write_url(n, C["@in"], f"{base}/outputs/{r['folder']}/{r['input']}", link, "open input")
         out_path = core.OUTPUT_DIR / r["folder"] / r["file"]
         if out_path.is_file():
             if pictures:
-                put_image(n, 8, out_path)
+                put_image(n, C["@out"], out_path)
             if base:
-                ws.write_url(n, 9, f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
-        ws.write(n, 10, r["cost_inr"], money)
-        if r.get("identify_cost") is not None:
-            ws.write(n, 11, r["identify_cost"], money)
-            ws.write(n, 12, r["scene_cost"], money)
-        ws.write(n, 13, r["total_cost"], money_b)
-        ws.write(n, 14, r.get("flow", ""), top)
-        ws.write(n, 15, r.get("category", ""), top)
-        ws.write(n, 16, r.get("subcategory", ""), top)
-        ws.write(n, 17, r.get("text_model", ""), top)
-        ws.write(n, 18, r.get("effort", ""), top)
-        ws.write(n, 19, cap(r.get("scene_description", "")), wrap)
-        ws.write(n, 20, cap(r.get("prompt_b", "")), wrap)
+                ws.write_url(n, C["@link"], f"{base}/outputs/{r['folder']}/{r['file']}", link, "open image")
         for j, (k, _) in enumerate(REVIEW_FIELDS):
             v = rv.get(k, "")
             ws.write(n, A0 + j, {"yes": "Yes", "no": "No"}.get(v, ""), green if v == "yes" else red if v == "no" else mid)
@@ -464,6 +507,25 @@ def batchreview_xlsx(request: Request, batch: str = "", pictures: int = 1, revie
         sm.write_formula(r_, 2, f"=COUNTIF('Batch review'!{col}2:{col}{last},\"No\")")
         sm.write_formula(r_, 3, f"={len(out)}-B{r_ + 1}-C{r_ + 1}")
         sm.write_formula(r_, 4, f'=IF(B{r_ + 1}+C{r_ + 1}=0,"",B{r_ + 1}/(B{r_ + 1}+C{r_ + 1}))', pct)
+    it_rows = _iter_rows([batch] if batch else sorted(_all_folders(), key=lambda n: int(n.split("_")[1])))
+    if it_rows:                                      # every run of the scene flow, each with its own cost
+        w2 = wb.add_worksheet("Iterations")
+        heads = [("Batch id", 24), ("Product file", 22), ("Step", 11), ("Run #", 7), ("Created", 17), ("Category > Subcategory", 24),
+                 ("Model", 22), ("Effort / size", 12), ("Prompt used (A2 or Prompt C)", 60), ("Result", 60), ("Output file", 26),
+                 ("Cost (INR)", 12), ("Status", 18)]
+        for i, (t, w) in enumerate(heads):
+            w2.write(0, i, t, hdr)
+            w2.set_column(i, i, w)
+        w2.freeze_panes(1, 0)
+        for n, r in enumerate(it_rows, start=1):
+            for i, v in enumerate([r["folder"], r["product"], r["step"], r["n"], r["created"], r["category"], r["model"], r["setting"],
+                                   cap(r["prompt"]), cap(r["result"]), r["file"]]):
+                w2.write(n, i, v, wrap if i in (8, 9) else top)
+            w2.write(n, 11, r["cost"], money)
+            w2.write(n, 12, r["status"], top)
+        w2.autofilter(0, 0, len(it_rows), len(heads) - 1)
+        w2.write(len(it_rows) + 1, 10, "Total", money_b)
+        w2.write_formula(len(it_rows) + 1, 11, f"=SUM(L2:L{len(it_rows) + 1})", money_b)
     wb.close()
     fname = f"batch_review_{batch or 'all_batches'}.xlsx"
     return Response(buf.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

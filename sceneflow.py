@@ -6,6 +6,7 @@
   POST /api/scene/{folder}/step2   Scene    : prompt A2 + text model + effort        -> a NEW structured scene (compared with the earlier ones)
   POST /api/scene/{folder}/step3   Image    : Prompt B ({SCENE} is replaced by the scene = Prompt C) -> gpt-image-2.5-sunburst, low
   POST /api/scene/{folder}/category  change the category / subcategory chosen in step 1 (clears the later steps of that product)
+  POST /api/scene/{folder}/select    choose which scene run of a product step 3 uses (all runs stay in the history)
   GET  /api/scene/{folder}/promptc   preview of Prompt C for a given Prompt B
   GET  /api/scene/library          category > subcategory > scenes (for the Scene library tab)
 
@@ -104,29 +105,53 @@ def sync(it: dict):
         it["status"], it["error"] = "running", ""
     elif sc.get("error"):
         it["status"], it["error"] = "error", sc["error"]
-    elif sc.get("step", 0) >= 3 and it.get("file"):
+    elif it.get("file"):
         it["status"], it["error"] = "done", ""
     else:
         it["status"], it["error"] = "queued", ""
 
 
-def _reset_from(it: dict, step: int):
-    """Forget this product's results from `step` onwards (a re-run). Costs already spent are kept."""
+def _now() -> str:
+    return datetime.now().strftime("%d %b %Y, %H:%M")
+
+
+def _migrate(it: dict):
+    """Every scene run (step 2) and every image run (step 3) of a product is kept in two lists, with its own cost.
+    Runs saved by an older version only kept the latest scene and image: turn those into list entries too."""
     sc = it["scene"]
-    if step <= 1:
-        for k in S1_KEYS:
-            sc.pop(k, None)
-    if step <= 2:
-        if sc.get("scene_id"):
-            lib.update_scene(sc["scene_id"], status="replaced")      # no longer counts as "used"
-        for k in S2_KEYS:
-            sc.pop(k, None)
-        it["file"] = None
-    if step <= 3:
-        for k in S3_KEYS:
-            sc.pop(k, None)
-    sc["step"] = min(sc.get("step", 0), step - 1)
-    sc["error"] = ""
+    sc.setdefault("runs2", [])
+    sc.setdefault("runs3", [])
+    if not sc["runs2"] and sc.get("scene"):
+        c = sc.get("s2_cfg") or {}
+        sc["runs2"].append({"n": 1, "scene_id": sc.get("scene_id"), "created": "", "category": sc.get("category"),
+                            "subcategory": sc.get("subcategory"), "text_model": c.get("text_model", ""), "effort": c.get("effort", ""),
+                            "prompt_a2": "", "previous_count": sc.get("previous_count", 0), "previous": sc.get("previous", []),
+                            "scene": sc["scene"], "scene_description": sc.get("scene_description", ""),
+                            "cost_inr": sc.get("scene_cost_inr", 0)})
+        sc["sel2"] = 1
+    if not sc["runs3"] and it.get("file") and sc.get("scene"):
+        sc["runs3"].append({"n": 1, "scene_n": sc.get("sel2", 1), "scene_id": sc.get("scene_id"), "created": "",
+                            "prompt_b": sc.get("prompt_b", ""), "prompt_c": sc.get("prompt_c", ""),
+                            "size": (sc.get("s3_cfg") or {}).get("size", ""), "file": it["file"], "cost_inr": it.get("cost_inr", 0)})
+
+
+def _apply_selection(sc: dict, rec: dict, has_image: bool):
+    """Make one scene run the selected one, the scene that step 3 draws from. Call with batch._LOCK held."""
+    sc.update(scene=rec["scene"], scene_description=rec["scene_description"], scene_id=rec["scene_id"],
+              previous_count=rec.get("previous_count", 0), previous=rec.get("previous", []),
+              s2_cfg={"text_model": rec.get("text_model", ""), "effort": rec.get("effort", "")},
+              sel2=rec["n"], step=3 if has_image else 2)
+
+
+def _unselect(it: dict):
+    """The product has no current scene any more (step 1 was run again, or its category was changed).
+    Its earlier scene and image runs stay in the history. Call with batch._LOCK held."""
+    sc = it["scene"]
+    if sc.get("scene_id"):
+        lib.update_scene(sc["scene_id"], status="replaced")          # no longer counts as "used"
+    for k in S2_KEYS + S3_KEYS:
+        sc.pop(k, None)
+    sc["sel2"] = None
 
 
 def _job(folder: str) -> dict:
@@ -166,8 +191,15 @@ def _begin(folder: str, step: int, indexes_raw: str) -> tuple:
         job.pop("error", None)
         for i in todo:
             it = job["items"][i]
-            _reset_from(it, step)
-            it["scene"]["running"] = step
+            sc = it["scene"]
+            _migrate(it)
+            if step == 1:                                   # a new identification: the earlier scene / image runs stay in the history
+                for k in S1_KEYS:
+                    sc.pop(k, None)
+                _unselect(it)
+                sc["step"] = 0
+            sc["error"], sc["error_step"] = "", 0
+            sc["running"] = step
             sync(it)
     batch._write(folder, job)
     return job, todo
@@ -274,9 +306,14 @@ def _run_step1(folder: str, job: dict, todo: list, cfg: dict):
 def _do_step2(folder: str, job: dict, i: int, cfg: dict):
     it = job["items"][i]
     sc = it["scene"]
+    before = sc.get("scene_cost_inr", 0)
+    n = len(sc.get("runs2", [])) + 1
+    base = {"n": n, "created": _now(), "category": sc.get("category"), "subcategory": sc.get("subcategory"),
+            "text_model": cfg["text_model"], "effort": cfg["effort"], "prompt_a2": cfg["prompt"]}
     try:
-        prev = lib.previous(sc["category"], sc["subcategory"], PREV_LIMIT)
-        prev_txt = ("\n".join(f"{n}. {p.get('summary') or lib.summary_of(p.get('scene', {}))}" for n, p in enumerate(prev, 1))
+        own = {r.get("scene_id") for r in sc.get("runs2", [])}      # this product's own earlier scene runs do not count as "used"
+        prev = [p for p in lib.previous(sc["category"], sc["subcategory"], 10 ** 6) if p.get("id") not in own][-PREV_LIMIT:]
+        prev_txt = ("\n".join(f"{k}. {p.get('summary') or lib.summary_of(p.get('scene', {}))}" for k, p in enumerate(prev, 1))
                     if prev else "None yet: this is the first scene for this subcategory.")
         ctx = (f"CONTEXT\nPRODUCT\ncategory: {sc['category']}\nsubcategory: {sc['subcategory']}\ndescription: {sc['product_description']}\n\n"
                f"PREVIOUS SCENES ALREADY USED FOR THIS SUBCATEGORY ({len(prev)}):\n{prev_txt}")
@@ -291,10 +328,20 @@ def _do_step2(folder: str, job: dict, i: int, cfg: dict):
         sid = lib.add_scene(sc["category"], sc["subcategory"], {
             "status": "pending", "folder": folder, "input": it["input"], "text_model": cfg["text_model"],
             "effort": cfg["effort"], "scene": scene, "scene_description": desc, "summary": lib.summary_of(scene)})
-        _set(sc, previous_count=len(prev), scene=scene, scene_description=desc, scene_id=sid, step=2,
-             previous=[{"concept": (p.get("scene") or {}).get("concept_name", ""), "summary": p.get("summary", "")} for p in prev],
-             s2_cfg={"text_model": cfg["text_model"], "effort": cfg["effort"]})
+        rec = {**base, "scene_id": sid, "previous_count": len(prev), "scene": scene, "scene_description": desc,
+               "previous": [{"concept": (p.get("scene") or {}).get("concept_name", ""), "summary": p.get("summary", "")} for p in prev],
+               "cost_inr": round(sc.get("scene_cost_inr", 0) - before, 4)}
+        with batch._LOCK:
+            old = sc.get("scene_id")
+            sc.setdefault("runs2", []).append(rec)
+            _apply_selection(sc, rec, False)                 # the newest scene run is the selected one
+        if old and old != sid:
+            lib.update_scene(old, status="replaced")         # only the selected scene of a product counts as "used"
     except Exception as e:
+        cost = round(sc.get("scene_cost_inr", 0) - before, 4)
+        if cost > 0:                                         # a failed call that still cost money stays in the history
+            with batch._LOCK:
+                sc.setdefault("runs2", []).append({**base, "error": str(getattr(e, "detail", None) or e)[:300], "cost_inr": cost})
         _fail(folder, job, i, e)
 
 
@@ -323,19 +370,22 @@ def _do_step3(folder: str, job: dict, i: int, prompt_b: str, size: str):
     sc = it["scene"]
     try:
         prompt_c = lib.build_prompt_c(sc["scene_description"], prompt_b)
-        _set(sc, prompt_c=prompt_c, prompt_b=prompt_b, s3_cfg={"size": size})
         png, usage = core._generate(_image_of(folder, it), prompt_c, size, batch.BATCH_MODEL, batch.BATCH_QUALITY)
-        k = sc.get("image_runs", 0) + 1
+        n3 = len(sc.get("runs3", [])) + 1
+        k = max(sc.get("image_runs", 0), n3 - 1) + 1
         fname = f"out_{i + 1:03d}_{batch._safe_name(it['orig_name'])}_{k}.png"
         cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, batch.BATCH_MODEL, batch.BATCH_QUALITY,
                            f"scene flow image | {folder}")
+        rec = {"n": n3, "scene_n": sc.get("sel2"), "scene_id": sc.get("scene_id"), "created": _now(), "prompt_b": prompt_b,
+               "prompt_c": prompt_c, "size": size, "file": fname, "cost_inr": round(cost, 4)}
         with batch._LOCK:
+            sc.setdefault("runs3", []).append(rec)
             it.update(file=fname, cost_inr=round((it.get("cost_inr") or 0) + cost, 4))
-            sc.update(step=3, image_runs=k)
+            sc.update(step=3, image_runs=k, prompt_c=prompt_c, prompt_b=prompt_b, s3_cfg={"size": size})
             job["total_inr"] = round(job.get("total_inr", 0) + cost, 4)
         lib.update_scene(sc["scene_id"], status="done", file=fname, prompt_b=prompt_b)
     except Exception as e:
-        if sc.get("scene_id"):
+        if sc.get("scene_id") and not any(r.get("scene_id") == sc["scene_id"] for r in sc.get("runs3", [])):
             lib.update_scene(sc["scene_id"], status="failed")
         _fail(folder, job, i, e)
 
@@ -378,7 +428,7 @@ async def scene_create(images: list[UploadFile] = File(...), name: str = Form(""
         fname = f"in_{n:03d}_{batch._safe_name(img[0])}{ext}"
         (d / fname).write_bytes(img[1])
         items.append({"input": fname, "orig_name": img[0], "status": "queued", "error": "", "file": None, "cost_inr": 0,
-                      "scene": {"step": 0, "running": 0, "error": "", "input": fname}})
+                      "scene": {"step": 0, "running": 0, "error": "", "input": fname, "runs2": [], "runs3": [], "sel2": None}})
     job = {"folder": folder, "flow": "scene", "state": "ready", "name": name.strip() or "Scene flow", "prompt": "",
            "size": "1088x1360", "model": batch.BATCH_MODEL, "quality": batch.BATCH_QUALITY,
            "created": datetime.now().strftime("%d %b %Y, %H:%M"), "total": len(items), "done": 0, "total_inr": 0, "items": items}
@@ -436,12 +486,44 @@ def scene_category(folder: str, payload: dict):
             raise HTTPException(400, "A step is running. Wait for it to finish.")
         if it["scene"].get("step", 0) < 1:
             raise HTTPException(400, "Run step 1 first.")
-        _reset_from(it, 2)
+        _migrate(it)
+        _unselect(it)
         cat, sub, new_cat, new_sub = lib.resolve(cat, sub)
         lib.ensure(cat, sub)
         it["scene"].update(category=cat, subcategory=sub, new_category=new_cat, new_subcategory=new_sub, edited=True,
                            existing_scenes=len(lib.previous(cat, sub, 10 ** 6)), step=1)
         sync(it)
+    batch._write(folder, job)
+    return {"ok": True}
+
+
+@router.post("/api/scene/{folder}/select")
+def scene_select(folder: str, payload: dict):
+    """Choose which scene run of a product step 3 should use. Nothing is deleted: every run stays in the history."""
+    job = _job(folder)
+    try:
+        i, n = int(payload.get("index")), int(payload.get("n"))
+        it = job["items"][i]
+    except Exception:
+        raise HTTPException(404, "Product not found.")
+    with batch._LOCK:
+        if job.get("state") == "running" or it["scene"].get("running"):
+            raise HTTPException(400, "A step is running. Wait for it to finish.")
+        _migrate(it)
+        sc = it["scene"]
+        rec = next((r for r in sc["runs2"] if r["n"] == n and r.get("scene")), None)
+        if not rec:
+            raise HTTPException(404, "Scene run not found.")
+        if (rec.get("category"), rec.get("subcategory")) != (sc.get("category"), sc.get("subcategory")):
+            raise HTTPException(400, f"That scene was written for {rec.get('category')} > {rec.get('subcategory')}, "
+                                     f"but this product is now filed as {sc.get('category')} > {sc.get('subcategory')}.")
+        old = sc.get("scene_id")
+        has_image = any(r.get("scene_n") == n for r in sc["runs3"])
+        _apply_selection(sc, rec, has_image)
+        sync(it)
+    if old and old != rec["scene_id"]:
+        lib.update_scene(old, status="replaced")
+    lib.update_scene(rec["scene_id"], status="done" if has_image else "pending")
     batch._write(folder, job)
     return {"ok": True}
 

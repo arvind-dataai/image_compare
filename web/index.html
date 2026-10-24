@@ -150,6 +150,16 @@ details.adv[open]>summary{margin-bottom:10px}
 .hb .hm{color:var(--mute);font-size:13px}
 .hb .hm b{color:var(--ink)}
 .hb .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.iter{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0 0 8px;background:var(--bg)}
+.iter.sel{border-color:var(--accent)}
+.iter pre{white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0;max-height:260px;overflow:auto}
+.iter .f{margin:0 0 5px;font-size:14px}
+.iter.img{display:flex;gap:12px;align-items:flex-start}
+.iter.img figure{flex:none;width:120px}
+.iter.img .ib{flex:1;min-width:0}
+.hiter{margin-top:10px}
+.hiter td.n,.hiter th.n{text-align:right}
+.hiter tr.grp td{background:var(--bg);font-weight:600;white-space:normal}
 .hide{display:none}
 </style>
 </head>
@@ -299,7 +309,7 @@ details.adv[open]>summary{margin-bottom:10px}
    <a class="ghost" id="brx2" href="/batch_review.xlsx?pictures=0">Excel, links only (small)</a>
    <label class="chk"><input type="checkbox" id="bronly"> Excel: reviewed images only</label>
   </div>
-  <p class="hint">This is a separate review sheet for batch runs. Answer the questions, then press <b>Save review</b>.</p>
+  <p class="hint">This is a separate review sheet for batch runs. Answer the questions, then press <b>Save review</b>. A product can have several images (one for each image run); each is reviewed on its own, and its cost is the chain that made it: identify + the scene run it came from + the image.</p>
  </div>
  <div id="brlist"></div>
 </section>
@@ -590,12 +600,12 @@ function brCard(it,i){
   const f=BR.fields, m=it.review||{}, saved=it.reviewed;
   return `<div class="card rv ${saved?"locked":""}" data-i="${i}">
     <figure><img src="${esc(it.input_url)}" alt="input" loading="lazy"><figcaption>Input · ${esc(it.orig_name)}</figcaption></figure>
-    <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · sunburst · low</figcaption></figure>
+    <figure><img src="${esc(it.url)}" alt="output" loading="lazy"><figcaption>Output · ${it.flow==="scene"?`image run #${it.image_run}`:"sunburst · low"}</figcaption></figure>
     <div class="info">
       <h3>${esc(it.folder)}<span class="tag ${saved?"ok":"todo"}">${saved?"✓ Reviewed":"Not reviewed"}</span></h3>
       <div class="sm">${esc(it.time)}${saved&&m.updated?` · saved ${esc(m.updated)}`:""}</div>
-      <div class="sm"><b>Cost of this image: ${inr(it.total_cost)}</b>${it.flow==="scene"?` (identify ${inr(it.identify_cost)} · scene ${inr(it.scene_cost)} · image ${inr(it.cost_inr)})`:""}</div>
-      ${it.flow==="scene"?`<div class="sm"><b>${esc(it.category)} &gt; ${esc(it.subcategory)}</b> · ${esc(it.text_model)} · effort ${esc(it.effort)} · earlier scenes seen: ${it.previous_count}</div>
+      <div class="sm"><b>Cost of this image: ${inr(it.total_cost)}</b>${it.flow==="scene"?` (identify ${inr(it.identify_cost)} · scene run #${it.scene_run} ${inr(it.scene_cost)} · image run #${it.image_run} ${inr(it.cost_inr)})`:""}</div>
+      ${it.flow==="scene"?`<div class="sm"><b>${esc(it.category)} &gt; ${esc(it.subcategory)}</b> · identify: ${esc(it.identify_model)} (${esc(it.identify_effort)}) · scene run #${it.scene_run}: ${esc(it.scene_model)} (${esc(it.scene_effort)}) · earlier scenes seen: ${it.previous_count}</div>
         <details><summary>Scene description</summary><pre>${esc(it.scene_description)}</pre></details>
         <details><summary>Prompt B (yours)</summary><pre>${esc(it.prompt_b||"(none)")}</pre></details>`:""}
       <details><summary>${it.flow==="scene"?"Prompt C given to the image model":"Prompt"}</summary><pre>${esc(it.prompt)}</pre></details>
@@ -711,7 +721,7 @@ function scRefresh(){
   $("#s1est").textContent=scEst(1,c1); $("#s2est").textContent=scEst(2,c2); $("#s3est").textContent=scEst(3,c3);
   $("#sfsel").textContent=sfiles.length?`${sfiles.length} photo${sfiles.length===1?"":"s"} = ${sfiles.length} separate product${sfiles.length===1?"":"s"} (limit ${SOPT.max_photos})`:"No photos yet.";
   $("#scUpload").classList.toggle("hide",!!j); $("#scHasRun").classList.toggle("hide",!j);
-  if(j){$("#scHasRun").innerHTML=`Run <b>${esc(j.folder)}</b> with <b>${j.items.length}</b> product${j.items.length===1?"":"s"}. Running a step again replaces its results and the later steps. Press <b>Start a new run</b> to use new photos.`;
+  if(j){$("#scHasRun").innerHTML=`Run <b>${esc(j.folder)}</b> with <b>${j.items.length}</b> product${j.items.length===1?"":"s"}. Running step 2 or step 3 again adds a new run and keeps the earlier ones (each with its own cost). Running step 1 again files the product afresh. Press <b>Start a new run</b> to use new photos.`;
     $("#scLabel").textContent=`${j.name} · ${j.folder}`; $("#scCost").textContent="cost "+inr(j.total_inr); $("#scCost").classList.remove("hide");}
   else{$("#scLabel").textContent="New run"; $("#scCost").classList.add("hide")}
 }
@@ -772,17 +782,18 @@ function applyJob(j){
 function renderScene(j){applyJob(j)}
 function renderSceneResults(j){renderAllCards(j);renderStepResults(j)}
 function renderStepResults(j){
-  const running=j.state==="running", [w,h]=(j.size||"1088x1360").split("x").map(Number);
+  const running=j.state==="running", [w,h]=(j.size||"1088x1360").split("x").map(Number), F=encodeURIComponent(j.folder);
   const rr=(k,n,label)=>`<button class="ghost" data-rerun="${k}:${n}" ${running?"disabled":""} style="padding:2px 10px;font-size:12.5px">${label}</button>`;
   const th=(it,c="")=>`<figure class="${c}"><img src="${esc(it.input_url)}" alt=""></figure>`;
-  const wait=(s,k,t)=>s.running===k?`<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border-width:2px"></span> ${t}...</div>`
-      :s.error&&s.error_step===k?`<div class="err">Failed: ${esc(s.error)}</div>`:`<div class="hint">Not run yet.</div>`;
+  const spin=t=>`<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;width:16px;height:16px;border-width:2px"></span> ${t}...</div>`;
   const hdr=(n,it)=>`<div class="nm">Product ${n+1} · ${esc(it.orig_name)}</div>`;
+  const cost=c=>c?` <span class="chip">cost ${inr(c)}</span>`:"";
   const r1=[],r2=[],r3=[];
   j.items.forEach((it,n)=>{
-    const s=it.scene||{}, st=s.step||0, run=s.running||0;
-    const cost=(c)=>c?` <span class="chip">cost ${inr(c)}</span>`:"";
-    r1.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=1?
+    const s=it.scene||{}, st=s.step||0, run=s.running||0, runs2=s.runs2||[], runs3=s.runs3||[], sel=s.sel2;
+    const failed=k=>s.error&&s.error_step===k?`<div class="err">Failed: ${esc(s.error)}</div>`:"";
+    /* ---- step 1 ---- */
+    r1.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=1||s.category?
       `<div><b style="font-size:16px">${esc(s.category)} &gt; ${esc(s.subcategory)}</b>
         <span class="chip ${s.new_category?"run":""}">${s.new_category?"new category":"existing category"}</span>
         <span class="chip ${s.new_subcategory?"run":""}">${s.new_subcategory?"new subcategory":"existing subcategory"}</span>${s.edited?' <span class="chip">edited by you</span>':""}${cost(s.classify_cost_inr)}</div>
@@ -791,20 +802,35 @@ function renderStepResults(j){
        <div class="hint">${esc((s.s1_cfg||{}).text_model||"")} · ${esc((s.s1_cfg||{}).effort||"")}</div>
        <details style="margin-top:6px"><summary class="hint">Change category / subcategory</summary>
         <div class="rvbar" style="margin-top:6px" data-catbox="${n}"><input type="text" value="${esc(s.category)}" data-c="cat" style="width:170px"><input type="text" value="${esc(s.subcategory)}" data-c="sub" style="width:170px">
-         <button class="ghost" data-catapply="${n}" ${running?"disabled":""}>Apply</button><span class="hint">Clears this product's scene and image.</span></div></details>
+         <button class="ghost" data-catapply="${n}" ${running?"disabled":""}>Apply</button><span class="hint">The selected scene is dropped; earlier runs stay in the history.</span></div></details>
        <div class="rvact">${rr(1,n,"Re-run step 1 for this product")}</div>`
-      :wait(s,1,"Identifying")+`<div class="rvact">${rr(1,n,"Run step 1 for this product")}</div>`)+`</div></div>`);
-    r2.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=2?
-      `<div class="hint">${esc((s.s2_cfg||{}).text_model||"")} · ${esc((s.s2_cfg||{}).effort||"")} · compared with <b>${s.previous_count||0}</b> earlier scene${(s.previous_count||0)===1?"":"s"}${cost(s.scene_cost_inr)}</div>
-       ${(s.previous||[]).length?`<details style="margin:4px 0"><summary class="hint">Earlier scenes it compared with</summary>${s.previous.map((p,k)=>`<div class="hint" style="margin:2px 0">${k+1}. ${esc(p.summary||p.concept)}</div>`).join("")}</details>`:""}
-       <div style="margin-top:6px">${Object.entries(SCENE_LABELS).filter(([k])=>s.scene&&s.scene[k]).map(([k,l])=>`<div class="sf"><b>${l}:</b> ${esc(s.scene[k])}</div>`).join("")}</div>
-       <div class="rvact">${rr(2,n,"Re-run step 2")}</div>`
-      :(st>=1?wait(s,2,"Writing the scene")+`<div class="rvact">${rr(2,n,"Run step 2 for this product")}</div>`:`<div class="hint">Run step 1 first.</div>`))+`</div></div>`);
-    r3.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`+(st>=3&&it.url?
-      `<figure class="big" style="width:170px"><img src="${esc(it.url)}" alt=""><figcaption>Output${cost(it.cost_inr)}</figcaption></figure>
-       ${s.prompt_c?`<details style="margin-top:6px"><summary class="hint">Prompt C that was sent</summary><pre style="white-space:pre-wrap;font:inherit;font-size:13px">${esc(s.prompt_c)}</pre></details>`:""}
-       <div class="rvact">${rr(3,n,"Re-run step 3")}</div>`
-      :(st>=2?(run===3?`<div class="ph" style="aspect-ratio:${w}/${h};width:150px"><div class="spin"></div>Generating...</div>`:wait(s,3,"Generating")+`<div class="rvact">${rr(3,n,"Run step 3 for this product")}</div>`):`<div class="hint">Run step 2 first.</div>`))+`</div></div>`);
+      :(run===1?spin("Identifying"):failed(1))+`<div class="rvact">${rr(1,n,"Run step 1 for this product")}</div>`)+`</div></div>`);
+    /* ---- step 2: every scene run ---- */
+    const sceneRuns=runs2.slice().reverse().map((r,idx)=>{
+      const head=`<b>Scene run #${r.n}</b>`, meta=`<div class="hint">${esc(r.text_model||"")} · ${esc(r.effort||"")}${r.created?` · ${esc(r.created)}`:""}</div>`;
+      if(r.error)return `<div class="iter">${head} <span class="chip bad">failed</span>${cost(r.cost_inr)}${meta}<div class="err">${esc(r.error)}</div></div>`;
+      const isSel=r.n===sel, imgs=runs3.filter(x=>x.scene_n===r.n).length;
+      return `<div class="iter ${isSel?"sel":""}">${head} ${isSel?'<span class="chip run">used for step 3</span>':""}${imgs?` <span class="chip">${imgs} image${imgs===1?"":"s"}</span>`:""}${cost(r.cost_inr)}
+        ${meta}<div class="hint">compared with <b>${r.previous_count||0}</b> earlier scene${(r.previous_count||0)===1?"":"s"}${r.category?` · ${esc(r.category)} &gt; ${esc(r.subcategory)}`:""}</div>
+        <details ${idx===0?"open":""}><summary class="hint">Scene</summary>
+         ${(r.previous||[]).length?`<details style="margin:4px 0"><summary class="hint">Earlier scenes it compared with</summary>${r.previous.map((p,k)=>`<div class="hint" style="margin:2px 0">${k+1}. ${esc(p.summary||p.concept)}</div>`).join("")}</details>`:""}
+         <div style="margin-top:6px">${Object.entries(SCENE_LABELS).filter(([k])=>r.scene&&r.scene[k]).map(([k,l])=>`<div class="f"><b>${l}:</b> ${esc(r.scene[k])}</div>`).join("")}</div></details>
+        ${r.prompt_a2?`<details><summary class="hint">Prompt A2 used (${r.prompt_a2.length.toLocaleString("en-IN")} characters)</summary><pre>${esc(r.prompt_a2)}</pre></details>`:""}
+        <div class="rvact">${isSel?"":`<button class="ghost" data-use="${n}:${r.n}" ${running?"disabled":""}>Use for step 3</button>`}<button class="ghost" data-mk="${n}:${r.n}" ${running?"disabled":""}>Make an image from this scene</button></div></div>`;
+    }).join("");
+    r2.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`
+      +(run===2?spin(`Writing scene run #${runs2.length+1}`):failed(2))+sceneRuns
+      +(st>=1?`<div class="rvact">${rr(2,n,runs2.length?"Run step 2 again (adds a new scene run)":"Run step 2 for this product")}</div>`
+             :(runs2.length?'<div class="hint">Run step 1 again to file this product, then step 2.</div>':'<div class="hint">Run step 1 first.</div>'))+`</div></div>`);
+    /* ---- step 3: every image run ---- */
+    const imgRuns=runs3.slice().reverse().map(r=>`<div class="iter img"><figure><img src="/outputs/${F}/${encodeURIComponent(r.file)}" alt=""></figure>
+      <div class="ib"><b>Image run #${r.n}</b> <span class="chip">from scene run #${r.scene_n}</span>${cost(r.cost_inr)}
+       <div class="hint">${esc(r.size||"")}${r.created?` · ${esc(r.created)}`:""}</div>
+       ${r.prompt_c?`<details><summary class="hint">Prompt C sent to the image model</summary><pre>${esc(r.prompt_c)}</pre></details>`:""}</div></div>`).join("");
+    r3.push(`<div class="pr1">${th(it)}<div class="body">${hdr(n,it)}`
+      +(run===3?`<div class="ph" style="aspect-ratio:${w}/${h};width:120px;margin-bottom:8px"><div class="spin"></div>Generating image run #${runs3.length+1}...</div>`:failed(3))+imgRuns
+      +(st>=2?`<div class="rvact">${rr(3,n,runs3.length?`Make another image from scene run #${sel}`:"Run step 3 for this product")}</div>`
+             :(runs3.length?'<div class="hint">Run step 2 again, or choose a scene run in step 2, to make more images.</div>':'<div class="hint">Run step 2 first.</div>'))+`</div></div>`);
   });
   [[1,r1],[2,r2],[3,r3]].forEach(([k,arr])=>{const b=$("#res"+k); b.innerHTML=`<h3>Results</h3>`+arr.join(""); b.classList.remove("hide")});
 }
@@ -812,15 +838,16 @@ function renderAllCards(j){
   const [w,h]=(j.size||"1088x1360").split("x").map(Number), running=j.state==="running";
   const html=j.items.map((it,n)=>{
     const s=it.scene||{}, st=s.step||0, run=s.running||0;
-    const chip=(k,l)=>`<span class="chip ${run===k?"run":""} ${s.error&&s.error_step===k?"bad":""}">${l}${st>=k?" ✓":run===k?" …":""}</span>`;
+    const chip=(k,l)=>`<span class="chip ${run===k?"run":""} ${s.error&&s.error_step===k?"bad":""}">${l}${run===k?" …":st>=k?" ✓":""}</span>`;
+    const runs2=(s.runs2||[]).filter(r=>r.scene), runs3=s.runs3||[];
     const rerun=(k,label,ok)=>ok?`<button class="ghost" data-rerun="${k}:${n}" ${running?"disabled":""} style="padding:2px 10px;font-size:12.5px">${label}</button>`:"";
     const cost=(it.cost_inr||0)+(s.classify_cost_inr||0)+(s.scene_cost_inr||0);
     return `<div class="card"><div class="bar" style="margin-bottom:8px"><span class="tot">Product ${n+1} · ${esc(it.orig_name)}</span>
-      ${chip(1,"1 Identify")} ${chip(2,"2 Scene")} ${chip(3,"3 Image")}${cost?`<span class="chip">cost ${inr(cost)}</span>`:""}</div>
+      ${chip(1,"1 Identify")} ${chip(2,"2 Scene")} ${chip(3,"3 Image")}${runs2.length>1||runs3.length>1?`<span class="chip">${runs2.length} scene runs · ${runs3.length} images</span>`:""}${cost?`<span class="chip">cost ${inr(cost)}</span>`:""}</div>
       ${s.error?`<div class="err" style="margin-bottom:8px">Step ${s.error_step||""} failed: ${esc(s.error)}</div>`:""}
-      <div class="top" style="grid-template-columns:130px 130px 1fr;gap:12px;margin:0">
+      <div class="top" style="grid-template-columns:130px minmax(130px,290px) 1fr;gap:12px;margin:0">
        <figure><img src="${esc(it.input_url)}" alt=""><figcaption>Input</figcaption></figure>
-       <div>${st>=3&&it.url?`<figure><img src="${esc(it.url)}" alt=""><figcaption>Output</figcaption></figure>`:`<div class="ph" style="aspect-ratio:${w}/${h}">${run===3?'<div class="spin"></div>Generating...':"No image yet"}</div>`}</div>
+       <div style="display:flex;flex-wrap:wrap;gap:8px">${runs3.slice().reverse().map(r=>`<figure style="width:130px"><img src="/outputs/${encodeURIComponent(j.folder)}/${encodeURIComponent(r.file)}" alt=""><figcaption>Image #${r.n} · scene #${r.scene_n}<br>${inr(r.cost_inr)}</figcaption></figure>`).join("")}${run===3||!runs3.length?`<div class="ph" style="aspect-ratio:${w}/${h};width:130px">${run===3?'<div class="spin"></div>Generating...':"No image yet"}</div>`:""}</div>
        <div>
         ${st>=1?`<div class="box"><details open><summary>Step 1 · Identify <span class="hint">(${esc((s.s1_cfg||{}).text_model||"")} · ${esc((s.s1_cfg||{}).effort||"")})</span></summary>
           <div style="padding:4px 0"><b style="font-size:16px">${esc(s.category)} &gt; ${esc(s.subcategory)}</b>
@@ -841,6 +868,15 @@ function renderAllCards(j){
   $("#scResults").innerHTML=html;
 }
 $("#bscene").addEventListener("click",async e=>{
+  const us=e.target.closest("[data-use]"), mk=e.target.closest("[data-mk]");
+  if(us||mk){
+    const [n,k]=(us||mk).dataset[us?"use":"mk"].split(":").map(Number);
+    try{
+      await api(`/api/scene/${SC.folder}/select`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index:n,n:k})});
+      if(mk){await runStep(3,n)} else applyJob(await api("/api/batch/"+encodeURIComponent(SC.folder)));
+    }catch(err){scMsg(3,err.message); alert(err.message)}
+    scRefresh(); return;
+  }
   const rr=e.target.closest("[data-rerun]");
   if(rr){const [k,n]=rr.dataset.rerun.split(":").map(Number); try{await runStep(k,n)}catch(err){scMsg(k,err.message)} scRefresh(); return}
   const ap=e.target.closest("[data-catapply]");
@@ -867,9 +903,9 @@ function histShow(){
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
-       <div class="hm">${esc(r.created)} · <b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
-       <div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div></div></div>`;
+       <div class="hm">${esc(r.created)} · ${r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -879,7 +915,26 @@ async function loadHist(){
 $$("input[name=hfilter]").forEach(r=>r.onchange=histShow);
 $("#hsearch").addEventListener("input",histShow);
 $("#hreload").onclick=loadHist;
-$("#hlist").addEventListener("click",e=>{
+function iterTable(j){
+  const F=encodeURIComponent(j.folder); let tot=0; const rows=[];
+  const row=(step,run,what,when,c,note)=>{tot+=c||0; rows.push(`<tr><td>${step}</td><td class="n">${run}</td><td>${what}</td><td>${esc(when||"")}</td><td class="n">${inr(c||0)}</td><td>${note}</td></tr>`)};
+  j.items.forEach((it,n)=>{
+    const s=it.scene||{};
+    rows.push(`<tr class="grp"><td colspan="6">Product ${n+1} · ${esc(it.orig_name)}${s.category?` · ${esc(s.category)} &gt; ${esc(s.subcategory)}`:""}</td></tr>`);
+    if(s.s1_cfg||s.classify_cost_inr)row("1 Identify",1,`${esc((s.s1_cfg||{}).text_model||"")} · ${esc((s.s1_cfg||{}).effort||"")}`,"",s.classify_cost_inr,"all identify calls for this product");
+    (s.runs2||[]).forEach(r=>row("2 Scene",r.n,`${esc(r.text_model||"")} · ${esc(r.effort||"")}`,r.created,r.cost_inr,r.error?`<span class="err">failed: ${esc(r.error)}</span>`:(r.n===s.sel2?"used for step 3":"")));
+    (s.runs3||[]).forEach(r=>row("3 Image",r.n,`${esc(r.size||"")} · from scene run #${r.scene_n}`,r.created,r.cost_inr,`<a href="/outputs/${F}/${encodeURIComponent(r.file)}" target="_blank">open image</a>`));
+  });
+  return `<div class="tw"><table><thead><tr><th>Step</th><th class="n">Run</th><th>Model · effort / size</th><th>When</th><th class="n">Cost</th><th>Note</th></tr></thead><tbody>${rows.join("")}
+    <tr><td colspan="4"><b>Total</b></td><td class="n"><b>${inr(tot)}</b></td><td></td></tr></tbody></table></div>`;
+}
+$("#hlist").addEventListener("click",async e=>{
+  const it=e.target.closest("[data-hiter]");
+  if(it){const box=$(`[data-hbox="${CSS.escape(it.dataset.hiter)}"]`);
+    if(!box.classList.contains("hide")){box.classList.add("hide");return}
+    box.classList.remove("hide"); box.innerHTML='<div class="hint">Loading...</div>';
+    try{box.innerHTML=iterTable(await api("/api/batch/"+encodeURIComponent(it.dataset.hiter)))}catch(err){box.innerHTML=`<div class="err">${esc(err.message)}</div>`}
+    return}
   const o=e.target.closest("[data-hopen]");
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
