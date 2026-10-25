@@ -18,6 +18,7 @@ extra branch that sends the user's own prompt straight to the image models (no t
 Optional password: set APP_PASSWORD in .env and the browser asks for it (user name can be anything).
 """
 import base64
+import hashlib
 import io
 import json
 from datetime import datetime
@@ -336,6 +337,7 @@ def _launch(img, prompt: str, cfg: dict) -> str:
         "folder": folder, "state": "running", "prompt": prompt, "size": size,
         "total": len(plans) + cfg["n_images"], "done": 0,
         "input_url": f"/outputs/{folder}/{in_name}", "branches": branches,
+        "image_key": hashlib.md5(img[1]).hexdigest(),
     }
     threading.Thread(target=_run_job, args=(folder, run_dir, img, in_name, prompt, size), daemon=True).start()
     return folder
@@ -360,7 +362,34 @@ async def compare(
 
 # ---- several prompts x several photos: prompt 1 on every photo, then prompt 2 on every photo, ...
 GROUPS: dict = {}
+GROUPS_FILE = Path(__file__).parent / "run_groups.json"       # kept on disk so a group can be reopened later from History
+_GLOCK = threading.Lock()
 MAX_PAIRS = int(os.getenv("WEB_MAX_PAIRS", "30"))             # safety cap: prompts x photos in one go
+
+
+def _save_groups():
+    try:
+        with _GLOCK:
+            GROUPS_FILE.write_text(json.dumps(GROUPS, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass                                                    # saving the list is best-effort
+
+
+def _load_groups():
+    try:
+        data = json.loads(GROUPS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    for gid, g in data.items():
+        if g.get("state") == "running":                        # the server restarted while it was running
+            g["state"] = "done"
+            for e in g["entries"]:
+                if e["state"] in ("queued", "running"):
+                    e["state"], e["error"] = "error", "Stopped: the server restarted before this run finished."
+        GROUPS[gid] = g
+
+
+_load_groups()
 
 
 def _run_group(gid: str, imgs: list, cfg: dict):
@@ -368,8 +397,11 @@ def _run_group(gid: str, imgs: list, cfg: dict):
     try:
         for e in g["entries"]:                                  # one pair at a time, in order
             e["state"] = "running"
+            _save_groups()
             try:
                 e["folder"] = _launch(imgs[e["image_no"] - 1], e["prompt"], cfg)
+                e["input_url"] = JOBS[e["folder"]]["input_url"]
+                _save_groups()
                 job = JOBS[e["folder"]]
                 while job.get("state") == "running":
                     time.sleep(1.5)
@@ -378,8 +410,10 @@ def _run_group(gid: str, imgs: list, cfg: dict):
             except Exception as ex:                             # a failed pair must not stop the others
                 e["state"] = "error"
                 e["error"] = str(getattr(ex, "detail", None) or ex)
+            _save_groups()
     finally:
         g["state"] = "done"
+        _save_groups()
 
 
 @router.post("/api/compare_multi")
@@ -403,10 +437,11 @@ async def compare_multi(
     names = [f.filename or f"image {i + 1}" for i, f in enumerate(images)]
     gid = f"g{int(time.time())}{secrets.token_hex(2)}"
     entries = [{"prompt_no": pi + 1, "image_no": ii + 1, "prompt": p, "image_name": names[ii],
-                "state": "queued", "folder": "", "error": ""}
+                "state": "queued", "folder": "", "input_url": "", "error": ""}
                for pi, p in enumerate(cfg["prompts"]) for ii in range(len(imgs))]
     GROUPS[gid] = {"id": gid, "state": "running", "entries": entries, "prompts": cfg["prompts"], "image_names": names,
-                   "size": size}
+                   "size": size, "created": datetime.now().strftime("%d %b %Y, %H:%M")}
+    _save_groups()
     threading.Thread(target=_run_group, args=(gid, imgs, cfg), daemon=True).start()
     return {"group": gid, "runs": pairs, "images_per_run": cfg["n_images"], "text_steps_per_run": len(cfg["plans"])}
 
@@ -417,6 +452,20 @@ def group_status(gid: str):
     if not g:
         raise HTTPException(404, "Unknown group (the server may have restarted). Open the runs from History.")
     return g
+
+
+_KEYS: dict = {}
+
+
+def _image_key(folder: str, name: str) -> str:
+    """Fingerprint of a run's input photo, so runs on the same photo can be put side by side (also for old runs)."""
+    k = (folder, name)
+    if k not in _KEYS:
+        try:
+            _KEYS[k] = hashlib.md5((core.OUTPUT_DIR / folder / name).read_bytes()).hexdigest()
+        except Exception:
+            _KEYS[k] = ""
+    return _KEYS[k]
 
 
 @router.get("/api/runs/{folder}")
@@ -440,7 +489,8 @@ def run_status(folder: str):
                      "status": "done", "items": with_urls(d["items"])}]
     return {"folder": folder, "state": "done", "total_inr": d["total_inr"], "prompt": d["meta"].get("Prompt", ""),
             "size": d["meta"].get("Size", "1024x1024"),
-            "input_url": f"/outputs/{folder}/{d['input']}", "branches": branches}
+            "input_url": f"/outputs/{folder}/{d['input']}", "image_key": _image_key(folder, d["input"]),
+            "branches": branches}
 
 
 def _ts(text: str, fallback: float = 0.0) -> float:
@@ -482,6 +532,20 @@ def history():
                 "title": job.get("prompt", ""), "state": job.get("state", "running"), "thumb": "",
                 "images_total": 0, "images_done": 0, "failed": 0, "cost_inr": job.get("total_inr", 0),
                 "models": [], "categories": []})
+    for g in GROUPS.values():
+        ents = g["entries"]
+        cost = sum(((_run_json(e["folder"]) or {}).get("total_inr") or (JOBS.get(e["folder"]) or {}).get("total_inr") or 0)
+                   for e in ents if e.get("folder"))
+        first = next((e["input_url"] for e in ents if e.get("input_url")), "")
+        when = g.get("created", "")
+        rows.append({
+            "type": "multi", "flow": None, "folder": g["id"], "created": when, "ts": _ts(when, 0.0),
+            "title": f"{len(g['prompts'])} prompt{'s' if len(g['prompts']) != 1 else ''} \u00d7 {len(g['image_names'])} image"
+                     f"{'s' if len(g['image_names']) != 1 else ''}: " + " | ".join(p[:50] for p in g["prompts"]),
+            "state": g.get("state", "done"), "thumb": first,
+            "images_total": len(ents), "images_done": sum(1 for e in ents if e["state"] == "done"),
+            "failed": sum(1 for e in ents if e["state"] == "error"),
+            "cost_inr": round(cost, 4), "models": [], "categories": []})
     for b in batch.batch_list()["batches"]:
         rows.append({
             "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],

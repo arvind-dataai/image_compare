@@ -331,10 +331,12 @@ details.adv[open]>summary{margin-bottom:10px}
    <div class="seg" style="margin:0">
     <label><input type="radio" name="hfilter" value="all" checked>All</label>
     <label><input type="radio" name="hfilter" value="single">Single runs</label>
+    <label><input type="radio" name="hfilter" value="multi">Multi-prompt</label>
     <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
    </div>
    <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
    <button class="ghost" id="hreload">Refresh</button>
+   <button class="primary hide" id="hcmp"></button>
    <span class="tot" id="htot"></span>
   </div>
  </div>
@@ -491,46 +493,78 @@ $("#run").onclick=async()=>{
   }catch(e){$("#msg").textContent=e.message}
   update();
 };
-function pollGroup(gid){
-  clearTimeout(gpoller);
+/* ---------- image x prompt view: one block per image, one column per prompt ---------- */
+const runOf=async f=>{
+  if(gcache[f])return gcache[f];
+  const j=await api("/api/runs/"+encodeURIComponent(f));
+  if(j.state&&j.state!=="running")gcache[f]=j;
+  return j;
+};
+function cellHtml(e){
+  const j=e.run;
+  if(!j)return e.state==="error"?`<div class="err">${esc(e.error||"Failed")}</div>`:'<div class="hint" style="padding:8px 0">Waiting for its turn...</div>';
+  const f=encodeURIComponent(j.folder), done=j.state==="done";
+  const head=done?`<div class="links" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span class="chip">${inr(j.total_inr||0)}</span><a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Comparison</a><a class="ghost" href="/api/runs/${f}/zip">Zip</a></div>`
+    :`<div class="hint" style="margin-bottom:6px">${j.state==="running"?`Working: ${j.done||0}/${j.total||0} steps...`:esc(j.state||"")}</div>`;
+  return head+jobHtml(j,true)+(e.state==="error"&&e.error?`<div class="err">${esc(e.error)}</div>`:"");
+}
+function matrixHtml(entries){
+  const imgs=[], prs=[];
+  entries.forEach(e=>{
+    if(!imgs.some(x=>x.key===e.ikey))imgs.push({key:e.ikey,url:e.url,label:e.label});
+    else{const m=imgs.find(x=>x.key===e.ikey); if(!m.url&&e.url)m.url=e.url}
+    if(!prs.includes(e.prompt))prs.push(e.prompt);
+  });
+  return imgs.map((im,i)=>{
+    const cols=prs.map((p,k)=>{
+      const es=entries.filter(e=>e.ikey===im.key&&e.prompt===p);
+      return `<div class="mcell" style="min-width:0"><div class="mph"><b>Prompt ${k+1}</b><details><summary class="hint" style="cursor:pointer">${esc(p.slice(0,90))}${p.length>90?"...":""}</summary><pre>${esc(p)}</pre></details></div>${es.length?es.map(cellHtml).join(""):'<div class="hint">Not run for this image</div>'}</div>`;
+    }).join("");
+    return `<div class="card mrow" style="margin:0 0 16px"><div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">${im.url?`<figure style="width:96px;margin:0"><img src="${esc(im.url)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px"></figure>`:""}<div><h2 style="margin:0">Image ${i+1}</h2><div class="hint">${esc(im.label||"")}</div></div></div>
+      <div style="overflow-x:auto"><div style="display:grid;grid-template-columns:repeat(${prs.length},minmax(250px,1fr));gap:14px;align-items:start;min-width:${prs.length>1?prs.length*260:0}px">${cols}</div></div></div>`;
+  }).join("");
+}
+function pollMatrix(fetcher){
+  clearTimeout(poller); clearTimeout(gpoller);
+  $("#result").classList.remove("hide");
   const tick=async()=>{
     try{
-      const g=await api("/api/groups/"+encodeURIComponent(gid));
-      const parts=[]; let total=0, done=0;
-      for(const e of g.entries){
-        let body="", chip=statusChip(e.state==="queued"?"queued":e.state), links="";
-        if(e.folder){
-          let h=gcache[e.folder];
-          if(!h){
-            try{
-              const j=await api("/api/runs/"+encodeURIComponent(e.folder));
-              h=jobHtml(j);
-              if(j.state!=="running"){ gcache[e.folder]={html:h,cost:j.total_inr||0}; h=gcache[e.folder]; }
-              else h={html:h,cost:0,live:true};
-            }catch(err){ h={html:"",cost:0,live:true}; }
-          }
-          body=h.html; total+=h.cost||0;
-          if(!h.live){ const f=encodeURIComponent(e.folder);
-            links=`<span class="chip">${inr(h.cost)}</span><a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Comparison page</a><a class="ghost" href="/api/runs/${f}/zip">Zip</a>`; }
-        }else body='<div class="hint" style="padding:8px 0">Waiting for its turn...</div>';
-        if(e.state==="done"||e.state==="error")done++;
-        if(e.error&&e.state==="error")body+=`<div class="err">${esc(e.error)}</div>`;
-        parts.push(`<div class="card" style="margin:12px 0"><div class="bh" style="gap:8px;flex-wrap:wrap"><span class="t">Prompt ${e.prompt_no} · Image ${e.image_no}</span><span class="hint">${esc(e.image_name)}</span>${chip}${links}</div>${body}</div>`);
-      }
-      $("#rbody").innerHTML=parts.join("");
-      $("#bar").innerHTML=g.state==="running"
-        ?`<span class="tot">Working: ${done}/${g.entries.length} runs done... (they run one after another; you can switch tabs and it keeps running)</span>`
-        :`<span class="tot">All ${g.entries.length} runs done · total cost ${inr(total)} · every run is also saved in History</span>`;
-      if(g.state==="running"){gpoller=setTimeout(tick,3000);return}
+      const r=await fetcher();
+      $("#rbody").innerHTML=matrixHtml(r.entries); $("#bar").innerHTML=r.bar;
+      if(r.running){gpoller=setTimeout(tick,3000);return}
     }catch(e){
-      $("#bar").innerHTML=`<span class="err">${esc(e.message)}</span>`;
-      gpoller=setTimeout(tick,6000);
+      $("#bar").innerHTML=`<span class="err">${esc(e.message)}</span>`; gpoller=setTimeout(tick,6000);
     }
   };
   tick();
 }
+function pollGroup(gid){
+  pollMatrix(async()=>{
+    const g=await api("/api/groups/"+encodeURIComponent(gid));
+    const entries=[]; let total=0, done=0;
+    for(const e of g.entries){
+      const run=e.folder?await runOf(e.folder):null;
+      if(e.state==="done"||e.state==="error")done++;
+      if(run&&run.state==="done")total+=run.total_inr||0;
+      entries.push({ikey:"i"+e.image_no,label:e.image_name,url:e.input_url,prompt:e.prompt,run,state:e.state,error:e.error});
+    }
+    const running=g.state==="running";
+    return {entries,running,bar:running
+      ?`<span class="tot">Working: ${done}/${g.entries.length} runs done... (they run one after another; you can switch tabs and it keeps running)</span>`
+      :`<span class="tot">All ${g.entries.length} runs done · total cost ${inr(total)} · every run is also saved in History</span>`};
+  });
+}
+function pollSelected(folders){
+  pollMatrix(async()=>{
+    const runs=await Promise.all(folders.map(runOf)); let total=0;
+    const entries=runs.filter(j=>j&&j.folder).map(j=>{ if(j.state==="done")total+=j.total_inr||0;
+      return {ikey:j.image_key||j.input_url,label:(j.input_url||"").split("/").pop(),url:j.input_url,prompt:(j.prompt||"").trim(),run:j,state:j.state==="done"?"done":"running"}});
+    const running=runs.some(j=>j.state==="running");
+    return {entries,running,bar:`<span class="tot">${running?"Working...":"Done"} · ${folders.length} run${folders.length===1?"":"s"} grouped by image · total cost ${inr(total)}</span>`};
+  });
+}
 function poll(folder){
-  clearTimeout(poller);
+  clearTimeout(poller); clearTimeout(gpoller);
   const tick=async()=>{
     try{
       const j=await api("/api/runs/"+encodeURIComponent(folder));
@@ -546,10 +580,10 @@ function statusChip(st,err){
   if(st==="error"||st==="skipped")return '<span class="chip bad">'+(st==="skipped"?"skipped":"failed")+'</span>';
   return '<span class="chip">waiting</span>';
 }
-function jobHtml(j){
+function jobHtml(j,compact){
   const [w,h]=(j.size||"1024x1024").split("x").map(Number);
   const f=encodeURIComponent(j.folder);
-  let html=`<div class="top"><figure class="in"><img src="${esc(j.input_url)}" alt="Input"><figcaption><b>Original (input)</b></figcaption></figure>
+  let html=compact?"":`<div class="top"><figure class="in"><img src="${esc(j.input_url)}" alt="Input"><figcaption><b>Original (input)</b></figcaption></figure>
     <div class="ptxt"><b>Your prompt</b><pre>${esc(j.prompt||"")}</pre></div></div>`;
   for(const b of j.branches){
     const isText=b.kind==="text";
@@ -968,24 +1002,26 @@ $("#bscene").addEventListener("click",async e=>{
 });
 
 /* ================= HISTORY ================= */
-let HIST=[];
+let HIST=[]; const HSEL=new Set();
 function histShow(){
   const f=$("input[name=hfilter]:checked").value, q=$("#hsearch").value.trim().toLowerCase();
   const rows=HIST.filter(r=>(f==="all"||r.type===f)&&(!q||[r.title,r.folder,r.created,(r.categories||[]).join(" "),(r.models||[]).join(" ")].join(" ").toLowerCase().includes(q)));
   const cost=rows.reduce((a,r)=>a+(r.cost_inr||0),0);
   $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
+  const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`;
   $("#hlist").innerHTML=rows.length?rows.map(r=>{
-    const kind=r.type==="single"?"Single run":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const kind=r.type==="single"?"Single run":r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
     const st=r.state;
-    const open=r.type==="single"?"single":"batch";
-    const more=r.type==="single"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+    const open=r.type==="single"?"single":r.type==="multi"?"multi":"batch";
+    const more=r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
       ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
+    const sel=r.type==="single"?`<label class="hint" style="display:block;margin-top:4px"><input type="checkbox" data-hsel="${esc(r.folder)}" ${HSEL.has(r.folder)?"checked":""}> select to compare</label>`:"";
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
        <div class="hm">${esc(r.created)} · ${r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
-       <div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
+       ${sel}<div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:r.type==="multi"?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -995,6 +1031,14 @@ async function loadHist(){
 $$("input[name=hfilter]").forEach(r=>r.onchange=histShow);
 $("#hsearch").addEventListener("input",histShow);
 $("#hreload").onclick=loadHist;
+$("#hcmp").onclick=()=>{
+  const fs=HIST.filter(r=>HSEL.has(r.folder)).sort((a,b)=>a.ts-b.ts).map(r=>r.folder);   // oldest first = prompt order
+  if(!fs.length)return;
+  gcache={}; $('nav button[data-tab="new"]').click(); pollSelected(fs); $("#result").scrollIntoView({behavior:"smooth"});
+};
+$("#hlist").addEventListener("change",e=>{const c=e.target.closest("[data-hsel]"); if(!c)return;
+  c.checked?HSEL.add(c.dataset.hsel):HSEL.delete(c.dataset.hsel);
+  const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`});
 function iterTable(j){
   const F=encodeURIComponent(j.folder); let tot=0; const rows=[];
   const row=(step,run,what,when,c,note)=>{tot+=c||0; rows.push(`<tr><td>${step}</td><td class="n">${run}</td><td>${what}</td><td>${esc(when||"")}</td><td class="n">${inr(c||0)}</td><td>${note}</td></tr>`)};
@@ -1018,6 +1062,7 @@ $("#hlist").addEventListener("click",async e=>{
   const o=e.target.closest("[data-hopen]");
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
+    else if(kind==="multi"){gcache={}; $('nav button[data-tab="new"]').click(); pollGroup(folder); $("#result").scrollIntoView({behavior:"smooth"})}
     else{$('nav button[data-tab="batch"]').click(); showBatch(folder)}
     return}
   const v=e.target.closest("[data-hrev]");
