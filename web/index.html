@@ -191,13 +191,17 @@ details.adv[open]>summary{margin-bottom:10px}
     <select id="size"></select>
    </div>
    <div>
-    <h2>5. Prompt</h2>
-    <textarea id="prompt" placeholder="e.g. on a wooden table with morning sunlight"></textarea>
-    <div class="count"><button type="button" class="ghost" id="recent" style="float:left;padding:2px 10px;font-size:13px">Recent prompts</button><span id="cnt">0</span> characters</div>
+    <h2>5. Prompts <span class="hint">(add as many as you like; each one runs on every image)</span></h2>
+    <div id="prompts"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:6px;position:relative">
+      <button type="button" class="ghost" id="padd" style="padding:2px 12px;font-size:16px" title="Add another prompt">+ Add prompt</button>
+      <button type="button" class="ghost" id="recent" style="padding:2px 10px;font-size:13px">Recent prompts</button>
+    </div>
     <div id="plist" class="hide card" style="margin:8px 0 0;padding:6px;max-height:220px;overflow:auto"></div>
-    <h2 style="margin-top:8px">6. Product image</h2>
-    <label class="drop" id="drop"><input type="file" id="file" accept="image/png,image/jpeg,image/webp" class="hide">
-      <div id="dropin">Click or drop an image here (PNG, JPEG, WEBP)</div></label>
+    <h2 style="margin-top:12px">6. Product images <span class="hint">(add as many as you like)</span></h2>
+    <label class="drop" id="drop"><input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+      <div id="dropin">Click or drop images here (PNG, JPEG, WEBP)</div></label>
+    <div id="thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
    </div>
   </div>
   <div class="go" style="margin-top:16px">
@@ -344,7 +348,7 @@ details.adv[open]>summary{margin-bottom:10px}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const inr=v=>"₹"+Number(v||0).toFixed(2);
-let OPT=null, file=null, poller=null;
+let OPT=null, files=[], poller=null, gpoller=null, gcache={};
 
 async function api(path,opts){
   const r=await fetch(path,opts);
@@ -396,18 +400,36 @@ function update(){
        +(branches>1?` (${branches} branches × ${per})`:"")
        +` · rough estimate <b>≈ ${inr(txtEst+imgEst)}</b> (real cost is shown after)`;
   }
+  const runs=Math.max(1,prompts().length)*Math.max(1,files.length);
+  if(n&&per&&runs>1) msg+=` · <b>${runs}</b> runs (${Math.max(1,prompts().length)} prompt${prompts().length>1?"s":""} × ${Math.max(1,files.length)} image${files.length>1?"s":""}) ≈ <b>${inr((txtEst+imgEst)*runs)}</b> in total`;
   const over=n>OPT.max_images;
   if(over) msg+=` <span class="msg">Too many images (limit ${OPT.max_images}). Select fewer options.</span>`;
   if(tm.length&&!p.length) msg+=` <span class="msg">Tick an effort level that the selected text model supports.</span>`;
   $("#est").innerHTML=msg;
-  $("#cnt").textContent=$("#prompt").value.length;
-  $("#run").disabled=!(per&&file&&$("#prompt").value.trim())||over||(tm.length>0&&!p.length);
+  renumber();
+  $("#run").disabled=!(per&&files.length&&prompts().length)||over||(tm.length>0&&!p.length);
 }
-function setFile(f){
-  if(!f)return; file=f;
-  const url=URL.createObjectURL(f);
-  $("#dropin").innerHTML=`<img src="${url}" alt=""><div>${esc(f.name)} · click to change</div>`;
-  update();
+function prompts(){return $$("#prompts textarea").map(t=>t.value.trim()).filter(Boolean)}
+function addPrompt(text=""){
+  const d=document.createElement("div"); d.className="prow"; d.style.marginBottom="8px";
+  d.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b class="pn"></b><span class="hint"><span class="pc">0</span> characters</span><span style="flex:1"></span><button type="button" class="ghost pm" title="Remove this prompt" style="padding:0 12px;font-size:18px;line-height:1.4">&minus;</button></div><textarea placeholder="e.g. on a wooden table with morning sunlight"></textarea>`;
+  d.querySelector("textarea").value=text;
+  d.querySelector(".pm").onclick=()=>{d.remove();update()};
+  $("#prompts").appendChild(d); update(); return d.querySelector("textarea");
+}
+function renumber(){
+  const rows=$$("#prompts .prow");
+  rows.forEach((r,i)=>{r.querySelector(".pn").textContent=rows.length>1?"Prompt "+(i+1):"Prompt";
+    r.querySelector(".pm").style.display=rows.length>1?"":"none";
+    r.querySelector(".pc").textContent=r.querySelector("textarea").value.length});
+}
+function drawThumbs(){
+  $("#thumbs").innerHTML=files.map((f,i)=>`<figure style="width:110px;margin:0;position:relative"><img src="${f._url}" alt="" style="width:110px;height:110px;object-fit:cover;border-radius:8px"><button type="button" class="ghost" data-rm="${i}" title="Remove this image" style="position:absolute;top:4px;right:4px;padding:0 8px;font-size:16px;line-height:1.3">&times;</button><figcaption class="hint" style="font-size:12px">${files.length>1?"Image "+(i+1)+" · ":""}${esc(f.name)}</figcaption></figure>`).join("");
+  $("#dropin").textContent=files.length?"Click or drop to add more images":"Click or drop images here (PNG, JPEG, WEBP)";
+}
+function addFiles(list){
+  for(const f of Array.from(list||[])){ if(!/^image\//.test(f.type))continue; f._url=URL.createObjectURL(f); files.push(f); }
+  drawThumbs(); update();
 }
 async function init(){
   OPT=await api("/api/options");
@@ -417,12 +439,16 @@ async function init(){
   $("#models").innerHTML=OPT.models.map((m,i)=>`<label class="opt ${m.available?"":"off"}"><input type="checkbox" name="model" value="${esc(m.id)}" ${i===0?"checked":""} ${m.available?"":"disabled"}><div><b>${esc(m.id.replace("gpt-image-","").replace("gemini-",""))}</b><span>${esc(m.label)}${m.available?"":" · not available: add "+esc(m.needs)}</span></div></label>`).join("");
   $("#quals").innerHTML=OPT.qualities.map((q,i)=>`<label class="opt q"><input type="checkbox" name="qual" value="${q}" ${i===0?"checked":""}><div><b>${q}</b></div></label>`).join("");
   $("#size").innerHTML=OPT.sizes.map(s=>`<option value="${s.id}">${esc(s.label)}</option>`).join("");
-  document.addEventListener("change",update); $("#prompt").oninput=update;
-  $("#file").onchange=e=>setFile(e.target.files[0]);
+  document.addEventListener("change",update);
+  $("#prompts").addEventListener("input",update);
+  $("#padd").onclick=()=>addPrompt("").focus();
+  addPrompt("");
+  $("#thumbs").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){e.preventDefault(); files.splice(+b.dataset.rm,1); drawThumbs(); update()}});
+  $("#file").onchange=e=>{addFiles(e.target.files); e.target.value=""};
   const d=$("#drop");
   ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
   ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
-  d.addEventListener("drop",e=>setFile(e.dataTransfer.files[0]));
+  d.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
   update();
 }
 
@@ -431,9 +457,11 @@ $("#recent").onclick=async()=>{
   const box=$("#plist");
   if(!box.classList.contains("hide")){box.classList.add("hide");return}
   try{
-    const {prompts}=await api("/api/prompts");
-    box.innerHTML=prompts.length?prompts.map((p,i)=>`<div class="pitem" data-i="${i}" style="padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer"><div>${esc(p.prompt)}</div><div class="hint">${esc(p.last_used)} · used in ${p.runs} run${p.runs>1?"s":""}</div></div>`).join(""):'<div class="hint" style="padding:6px">No earlier prompts yet.</div>';
-    box.onclick=e=>{const it=e.target.closest(".pitem");if(!it)return;$("#prompt").value=prompts[it.dataset.i].prompt;box.classList.add("hide");update()};
+    const {prompts:list}=await api("/api/prompts");
+    box.innerHTML=list.length?list.map((p,i)=>`<div class="pitem" data-i="${i}" style="padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer"><div>${esc(p.prompt)}</div><div class="hint">${esc(p.last_used)} · used in ${p.runs} run${p.runs>1?"s":""}</div></div>`).join(""):'<div class="hint" style="padding:6px">No earlier prompts yet.</div>';
+    box.onclick=e=>{const it=e.target.closest(".pitem");if(!it)return;
+      const empty=$$("#prompts textarea").find(t=>!t.value.trim()); const ta=empty||addPrompt("");
+      ta.value=list[it.dataset.i].prompt;box.classList.add("hide");update()};
     box.classList.remove("hide");
   }catch(e){$("#msg").textContent=e.message}
 };
@@ -441,18 +469,66 @@ $("#recent").onclick=async()=>{
 /* ---------- run ---------- */
 $("#run").onclick=async()=>{
   $("#msg").textContent=""; $("#run").disabled=true;
+  const ps=prompts(), multi=ps.length>1||files.length>1;
   const fd=new FormData();
-  fd.append("image",file); fd.append("prompt",$("#prompt").value.trim()); fd.append("size",$("#size").value);
+  if(multi){ files.forEach(f=>fd.append("images",f)); ps.forEach(t=>fd.append("prompts",t)); }
+  else { fd.append("image",files[0]); fd.append("prompt",ps[0]); }
+  fd.append("size",$("#size").value);
   checked("model").forEach(m=>fd.append("models",m)); checked("qual").forEach(q=>fd.append("qualities",q));
   checked("tmodel").forEach(t=>fd.append("text_models",t)); checked("effort").forEach(x=>fd.append("efforts",x));
   fd.append("direct",$("input[name=direct]").checked?"true":"false");
   try{
-    const {folder}=await api("/api/compare",{method:"POST",body:fd});
-    $("#result").classList.remove("hide"); $("#result").scrollIntoView({behavior:"smooth"});
-    poll(folder);
+    clearTimeout(poller); clearTimeout(gpoller); gcache={};
+    if(multi){
+      const {group}=await api("/api/compare_multi",{method:"POST",body:fd});
+      $("#result").classList.remove("hide"); $("#result").scrollIntoView({behavior:"smooth"});
+      pollGroup(group);
+    }else{
+      const {folder}=await api("/api/compare",{method:"POST",body:fd});
+      $("#result").classList.remove("hide"); $("#result").scrollIntoView({behavior:"smooth"});
+      poll(folder);
+    }
   }catch(e){$("#msg").textContent=e.message}
   update();
 };
+function pollGroup(gid){
+  clearTimeout(gpoller);
+  const tick=async()=>{
+    try{
+      const g=await api("/api/groups/"+encodeURIComponent(gid));
+      const parts=[]; let total=0, done=0;
+      for(const e of g.entries){
+        let body="", chip=statusChip(e.state==="queued"?"queued":e.state), links="";
+        if(e.folder){
+          let h=gcache[e.folder];
+          if(!h){
+            try{
+              const j=await api("/api/runs/"+encodeURIComponent(e.folder));
+              h=jobHtml(j);
+              if(j.state!=="running"){ gcache[e.folder]={html:h,cost:j.total_inr||0}; h=gcache[e.folder]; }
+              else h={html:h,cost:0,live:true};
+            }catch(err){ h={html:"",cost:0,live:true}; }
+          }
+          body=h.html; total+=h.cost||0;
+          if(!h.live){ const f=encodeURIComponent(e.folder);
+            links=`<span class="chip">${inr(h.cost)}</span><a class="ghost" target="_blank" href="/outputs/${f}/comparison.html">Comparison page</a><a class="ghost" href="/api/runs/${f}/zip">Zip</a>`; }
+        }else body='<div class="hint" style="padding:8px 0">Waiting for its turn...</div>';
+        if(e.state==="done"||e.state==="error")done++;
+        if(e.error&&e.state==="error")body+=`<div class="err">${esc(e.error)}</div>`;
+        parts.push(`<div class="card" style="margin:12px 0"><div class="bh" style="gap:8px;flex-wrap:wrap"><span class="t">Prompt ${e.prompt_no} · Image ${e.image_no}</span><span class="hint">${esc(e.image_name)}</span>${chip}${links}</div>${body}</div>`);
+      }
+      $("#rbody").innerHTML=parts.join("");
+      $("#bar").innerHTML=g.state==="running"
+        ?`<span class="tot">Working: ${done}/${g.entries.length} runs done... (they run one after another; you can switch tabs and it keeps running)</span>`
+        :`<span class="tot">All ${g.entries.length} runs done · total cost ${inr(total)} · every run is also saved in History</span>`;
+      if(g.state==="running"){gpoller=setTimeout(tick,3000);return}
+    }catch(e){
+      $("#bar").innerHTML=`<span class="err">${esc(e.message)}</span>`;
+      gpoller=setTimeout(tick,6000);
+    }
+  };
+  tick();
+}
 function poll(folder){
   clearTimeout(poller);
   const tick=async()=>{
@@ -470,7 +546,7 @@ function statusChip(st,err){
   if(st==="error"||st==="skipped")return '<span class="chip bad">'+(st==="skipped"?"skipped":"failed")+'</span>';
   return '<span class="chip">waiting</span>';
 }
-function renderJob(j){
+function jobHtml(j){
   const [w,h]=(j.size||"1024x1024").split("x").map(Number);
   const f=encodeURIComponent(j.folder);
   let html=`<div class="top"><figure class="in"><img src="${esc(j.input_url)}" alt="Input"><figcaption><b>Original (input)</b></figcaption></figure>
@@ -493,7 +569,11 @@ function renderJob(j){
     }
     html+=`<div class="branch">${head}${box}<div class="arrow">&#8595; image model(s)</div><div class="grid">${cards}</div></div>`;
   }
-  $("#rbody").innerHTML=html;
+  return html;
+}
+function renderJob(j){
+  const f=encodeURIComponent(j.folder);
+  $("#rbody").innerHTML=jobHtml(j);
   const running=j.state==="running";
   $("#bar").innerHTML=running
     ?`<span class="tot">Working: ${j.done}/${j.total} steps done... (you can switch tabs; it keeps running)</span>`

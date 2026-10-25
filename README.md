@@ -247,3 +247,7 @@ Every run of step 2 (a **scene run**) and of step 3 (an **image run**) is kept f
 * Code: `sceneflow.py` (steps and API), `scene_library.py` (storage and name matching). Limit: `WEB_BATCH_MAX` photos per run (default 100).
 
 Note: the page has five tabs: New run, Batch, Batch review, Scene library and History. History lists every single run and batch run, newest first, with a filter, a search box and an Open button for each (`GET /api/history`). The old Review and Cost log tabs were removed.
+
+
+## New run: several prompts and several images
+In the New run tab, `+ Add prompt` / `-` add and remove prompts, and you can add several product images. Every prompt runs on every image, one pair at a time: prompt 1 on image 1, prompt 1 on image 2, then prompt 2 on image 1, and so on. Each pair is a normal run (see History) and the results are grouped as "Prompt N - Image N". One prompt and one image works as before. Limit: `WEB_MAX_PAIRS` (default 30) pairs per go.

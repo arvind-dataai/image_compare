@@ -25,6 +25,7 @@ import os
 import re
 import secrets
 import threading
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -270,19 +271,10 @@ def options():
     }
 
 
-@router.post("/api/compare")
-async def compare(
-    image: UploadFile = File(...),
-    prompt: str = Form(...),
-    models: list[str] = Form(...),
-    qualities: list[str] = Form([]),
-    size: str = Form("1024x1024"),
-    text_models: list[str] = Form([]),
-    efforts: list[str] = Form([]),
-    direct: bool = Form(False),
-):
-    prompt = prompt.strip()
-    if not prompt:
+def _validate(prompts, models, qualities, size, text_models, efforts, direct):
+    """Check the options once. Returns the cleaned settings used to launch every run."""
+    prompts = [p.strip() for p in prompts if p and p.strip()]
+    if not prompts:
         raise HTTPException(400, "Enter a prompt.")
     models = [m for m in WEB_MODELS if m in models]            # keeps a fixed order, drops unknowns
     qualities = [q for q in WEB_QUALITIES if q in qualities]
@@ -309,9 +301,14 @@ async def compare(
     combos = [(m, q) for m in models for q in ([STANDARD] if m in NO_QUALITY else qualities)]
     n_images = n_branches * len(combos)
     if n_images > MAX_IMAGES:
-        raise HTTPException(400, f"That would make {n_images} images (limit {MAX_IMAGES}). Select fewer options.")
-    img = await core._read_image(image)
+        raise HTTPException(400, f"That would make {n_images} images per prompt and photo (limit {MAX_IMAGES}). Select fewer options.")
+    return dict(prompts=prompts, models=models, size=size, plans=plans, use_direct=use_direct,
+                combos=combos, n_images=n_images)
 
+
+def _launch(img, prompt: str, cfg: dict) -> str:
+    """Create one run (one photo + one prompt) and start it in a background thread. Returns its folder."""
+    plans, use_direct, combos, models, size = cfg["plans"], cfg["use_direct"], cfg["combos"], cfg["models"], cfg["size"]
     branches = []
     if use_direct:
         branches.append({"id": "direct", "kind": "direct", "slug": "direct",
@@ -337,32 +334,89 @@ async def compare(
     in_name = core._save_input(run_dir, img)
     JOBS[folder] = {
         "folder": folder, "state": "running", "prompt": prompt, "size": size,
-        "total": len(plans) + n_images, "done": 0,
+        "total": len(plans) + cfg["n_images"], "done": 0,
         "input_url": f"/outputs/{folder}/{in_name}", "branches": branches,
     }
     threading.Thread(target=_run_job, args=(folder, run_dir, img, in_name, prompt, size), daemon=True).start()
-    return {"folder": folder, "images": n_images, "text_steps": len(plans)}
+    return folder
 
 
-@router.get("/api/prompts")
-def prompts():
-    """Distinct prompts used in earlier runs, newest first (for the 'Recent prompts' list)."""
-    found = []
-    for p in core.OUTPUT_DIR.iterdir():
-        mm = re.match(r"^(\d+)_", p.name)
-        d = _run_json(p.name) if (p.is_dir() and mm) else None
-        text = (d or {}).get("meta", {}).get("Prompt")
-        if text:
-            found.append((int(mm.group(1)), text, d.get("time", "")))
-    found.sort(key=lambda t: -t[0])
-    seen, out = {}, []
-    for _, text, when in found:
-        if text in seen:
-            seen[text]["runs"] += 1
-        else:
-            seen[text] = {"prompt": text, "last_used": when, "runs": 1}
-            out.append(seen[text])
-    return {"prompts": out[:30]}
+@router.post("/api/compare")
+async def compare(
+    image: UploadFile = File(...),
+    prompt: str = Form(...),
+    models: list[str] = Form(...),
+    qualities: list[str] = Form([]),
+    size: str = Form("1024x1024"),
+    text_models: list[str] = Form([]),
+    efforts: list[str] = Form([]),
+    direct: bool = Form(False),
+):
+    cfg = _validate([prompt], models, qualities, size, text_models, efforts, direct)
+    img = await core._read_image(image)
+    folder = _launch(img, cfg["prompts"][0], cfg)
+    return {"folder": folder, "images": cfg["n_images"], "text_steps": len(cfg["plans"])}
+
+
+# ---- several prompts x several photos: prompt 1 on every photo, then prompt 2 on every photo, ...
+GROUPS: dict = {}
+MAX_PAIRS = int(os.getenv("WEB_MAX_PAIRS", "30"))             # safety cap: prompts x photos in one go
+
+
+def _run_group(gid: str, imgs: list, cfg: dict):
+    g = GROUPS[gid]
+    try:
+        for e in g["entries"]:                                  # one pair at a time, in order
+            e["state"] = "running"
+            try:
+                e["folder"] = _launch(imgs[e["image_no"] - 1], e["prompt"], cfg)
+                job = JOBS[e["folder"]]
+                while job.get("state") == "running":
+                    time.sleep(1.5)
+                e["state"] = "error" if job.get("state") == "error" else "done"
+                e["error"] = job.get("error", "")
+            except Exception as ex:                             # a failed pair must not stop the others
+                e["state"] = "error"
+                e["error"] = str(getattr(ex, "detail", None) or ex)
+    finally:
+        g["state"] = "done"
+
+
+@router.post("/api/compare_multi")
+async def compare_multi(
+    images: list[UploadFile] = File(...),
+    prompts: list[str] = Form(...),
+    models: list[str] = Form(...),
+    qualities: list[str] = Form([]),
+    size: str = Form("1024x1024"),
+    text_models: list[str] = Form([]),
+    efforts: list[str] = Form([]),
+    direct: bool = Form(False),
+):
+    cfg = _validate(prompts, models, qualities, size, text_models, efforts, direct)
+    if not images:
+        raise HTTPException(400, "Add at least one product image.")
+    pairs = len(cfg["prompts"]) * len(images)
+    if pairs > MAX_PAIRS:
+        raise HTTPException(400, f"That would be {pairs} runs (limit {MAX_PAIRS}). Use fewer prompts or photos.")
+    imgs = [await core._read_image(f) for f in images]
+    names = [f.filename or f"image {i + 1}" for i, f in enumerate(images)]
+    gid = f"g{int(time.time())}{secrets.token_hex(2)}"
+    entries = [{"prompt_no": pi + 1, "image_no": ii + 1, "prompt": p, "image_name": names[ii],
+                "state": "queued", "folder": "", "error": ""}
+               for pi, p in enumerate(cfg["prompts"]) for ii in range(len(imgs))]
+    GROUPS[gid] = {"id": gid, "state": "running", "entries": entries, "prompts": cfg["prompts"], "image_names": names,
+                   "size": size}
+    threading.Thread(target=_run_group, args=(gid, imgs, cfg), daemon=True).start()
+    return {"group": gid, "runs": pairs, "images_per_run": cfg["n_images"], "text_steps_per_run": len(cfg["plans"])}
+
+
+@router.get("/api/groups/{gid}")
+def group_status(gid: str):
+    g = GROUPS.get(gid)
+    if not g:
+        raise HTTPException(404, "Unknown group (the server may have restarted). Open the runs from History.")
+    return g
 
 
 @router.get("/api/runs/{folder}")
