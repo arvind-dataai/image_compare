@@ -1187,13 +1187,13 @@ function r1Render(){
     if(!(it.images.length||it.running==="image"||it.sel))return "";
     const [w,h]=(j.size||"1088x1360").split("x").map(Number);
     const cur=chosenText(it);
-    return `<div class="r1photo"><div class="r1head"><figure style="width:56px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure><b>Photo ${i+1}</b>
+    return `<div class="r1photo"><div class="r1head"><figure style="width:56px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure><b>Photo ${i+1}</b><span class="chip" title="all prompt runs + all images of this photo">photo total ${inr(photoTotal(it))}</span>
        ${it.running==="image"?'<span class="chip run">making the image...</span>':""}</div>
       ${cur?`<details open><summary class="hint" style="cursor:pointer">Prompt C that will be sent now (Prompt B, then the chosen prompt)</summary><div class="box"><b>Prompt C</b><pre data-pc="${i}">${esc(($("#r1b").value.trim()+"\n\n"+cur).trim())}</pre></div></details>`:'<div class="hint">No tile chosen for this photo yet.</div>'}
       ${it.error&&it.running!=="image"&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
       <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px">
        ${it.running==="image"?`<div class="ph" style="aspect-ratio:${w}/${h};width:200px"><div class="spin"></div>Generating...</div>`:""}
-       ${it.images.slice().reverse().map(r=>`<div style="display:flex;gap:14px;flex-wrap:wrap;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)"><figure style="width:200px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · ${inr(r.cost_inr)}<br><span class="hint">prompt ${r.tile_idx+1} of run ${r.run_n} (${esc(r.text_model)} · ${esc(r.effort)})</span></figcaption></figure>
+       ${it.images.slice().reverse().map(r=>`<div style="display:flex;gap:14px;flex-wrap:wrap;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)"><figure style="width:200px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · total <b>${inr(runCost(it,r.run_n)+r.cost_inr)}</b><br><span class="hint">prompts run ${r.run_n} ${inr(runCost(it,r.run_n))} + image ${inr(r.cost_inr)}<br>prompt ${r.tile_idx+1} of run ${r.run_n} (${esc(r.text_model)} · ${esc(r.effort)})</span></figcaption></figure>
          <div style="flex:1;min-width:260px"><b>Final prompt sent to the image model (Prompt C)</b> <span class="hint">· ${esc(r.size||"")} · ${r.prompt_c.length.toLocaleString("en-IN")} characters</span>
           <pre style="white-space:pre-wrap;font-size:13px;max-height:340px;overflow:auto;margin:6px 0 0">${esc(r.prompt_c)}</pre>
           <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Only the chosen prompt (the part added after Prompt B)</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(r.prompt_a_output)}</pre></details></div></div>`).join("")}
@@ -1201,6 +1201,8 @@ function r1Render(){
   }).join("");
   r1Refresh();
 }
+function runCost(it,n){const r=it.runs.find(x=>x.n===n); return r?r.cost_inr:0}
+function photoTotal(it){return it.runs.reduce((a,r)=>a+r.cost_inr,0)+it.images.reduce((a,r)=>a+r.cost_inr,0)}
 function chosenText(it){
   if(!it.sel)return "";
   const r=it.runs.find(x=>x.n===it.sel.run); return r?(r.tiles[it.sel.tile]||""):"";
