@@ -150,6 +150,17 @@ details.adv[open]>summary{margin-bottom:10px}
 .hb .hm{color:var(--mute);font-size:13px}
 .hb .hm b{color:var(--ink)}
 .hb .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin:6px 0 12px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);cursor:pointer;font-size:14px;white-space:pre-wrap;max-height:150px;overflow:hidden;position:relative}
+.tile:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(transparent,var(--bg));pointer-events:none}
+.tile.sel:not(.open)::after{background:linear-gradient(transparent,var(--card))}
+.tile.open{max-height:none;grid-column:1/-1;font-size:15px;line-height:1.55}
+.tile .xp{float:right;font-size:12px;color:var(--accent);cursor:pointer;margin-left:8px;padding:0 4px}
+.tile:hover{border-color:var(--accent)}
+.tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--card)}
+.tile .k{display:block;font-weight:600;font-size:12px;color:var(--mute);margin-bottom:4px}
+.r1photo{border:1px solid var(--line);border-radius:10px;padding:12px;margin:0 0 14px}
+.r1head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 .iter{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0 0 8px;background:var(--bg)}
 .iter.sel{border-color:var(--accent)}
 .iter pre{white-space:pre-wrap;font:inherit;font-size:13px;margin:6px 0;max-height:260px;overflow:auto}
@@ -169,6 +180,7 @@ details.adv[open]>summary{margin-bottom:10px}
 <nav>
   <button data-tab="new" class="on">New run</button>
   <button data-tab="batch">Batch</button>
+  <button data-tab="r1">R1</button>
   <button data-tab="brev">Batch review</button>
   <button data-tab="lib">Scene library</button>
   <button data-tab="hist">History</button>
@@ -300,6 +312,56 @@ details.adv[open]>summary{margin-bottom:10px}
  <div id="blist"></div>
 </section>
 
+<!-- ============ R1 ============ -->
+<section id="tab-r1" class="hide">
+ <div class="hero-lite">
+  <span class="t" id="r1Label">New R1 run</span>
+  <span class="chip hide" id="r1Cost"></span>
+  <button class="ghost" id="r1New">Start a new run</button>
+ </div>
+
+ <div class="stepcard s1">
+  <div class="stephead"><span class="num">1</span><div><b>Prompt A: the text model writes several prompts</b><div class="hint" style="margin:0">Every photo gets its own set of prompts, shown as tiles. Click a tile to choose it.</div></div></div>
+  <div class="form">
+   <div>
+    <div id="r1Upload">
+     <h2>Product photos <span class="hint">(one or many)</span></h2>
+     <label class="drop" id="r1drop"><input type="file" id="r1file" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+       <div>Click or drop the photos here (PNG, JPEG, WEBP)</div></label>
+     <div id="r1thumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+     <input id="r1name" type="text" placeholder="Run name (optional)" style="margin-top:8px;width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    </div>
+    <div id="r1HasRun" class="hint hide"></div>
+    <div class="pair" style="margin-top:10px"><div><div class="sub" style="margin:0 0 3px">Text model</div><select id="r1model"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select id="r1eff"></select></div></div>
+    <div class="sub" style="margin:10px 0 3px">How many prompts per photo</div><input id="r1count" type="number" min="1" value="5" style="width:90px;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px">
+   </div>
+   <div>
+    <h2>Prompt A</h2>
+    <textarea id="r1a" style="min-height:220px" placeholder="Tell the text model what kind of prompts to write for the product in the photo."></textarea><div class="cc"><span id="cc_r1a">0</span> characters</div>
+    <p class="hint">The system adds the number of prompts and the reply format after this text.</p>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="r1go" disabled>Write the prompts</button><span class="est" id="r1est"></span><span class="msg" id="r1msg"></span></div>
+  <div id="r1tiles" class="hide" style="margin-top:14px"></div>
+ </div>
+
+ <div class="stepcard s3">
+  <div class="stephead"><span class="num">2</span><div><b>Prompt B + the chosen prompt: make the image</b><div class="hint" style="margin:0">Prompt C = Prompt B, then the prompt you chose for that photo. Image model: gpt-image-2.5-sunburst, low.</div></div></div>
+  <div class="form">
+   <div>
+    <h2>Prompt B <button class="ghost" id="r1breset" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea id="r1b" style="min-height:260px"></textarea><div class="cc"><span id="cc_r1b">0</span> characters</div>
+   </div>
+   <div>
+    <div class="sub" style="margin:0 0 3px">Size</div><select id="r1size"></select>
+    <p class="hint">Photos that have no chosen prompt are skipped. You can make an image again with a different tile; every image is kept in History with the prompt that was chosen.</p>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="r1img" disabled>Make the images</button><span class="est" id="r1imgest"></span><span class="msg" id="r1imgmsg"></span></div>
+  <div id="r1imgs" class="hide" style="margin-top:14px"></div>
+ </div>
+</section>
+
 <!-- ============ BATCH REVIEW ============ -->
 <section id="tab-brev" class="hide">
  <div class="card">
@@ -332,6 +394,7 @@ details.adv[open]>summary{margin-bottom:10px}
     <label><input type="radio" name="hfilter" value="all" checked>All</label>
     <label><input type="radio" name="hfilter" value="single">Single runs</label>
     <label><input type="radio" name="hfilter" value="multi">Multi-prompt</label>
+    <label><input type="radio" name="hfilter" value="r1">R1</label>
     <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
    </div>
    <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
@@ -361,8 +424,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","batch","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
+  ["new","batch","r1","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
 });
 
 /* ---------- lightbox ---------- */
@@ -1001,27 +1064,195 @@ $("#bscene").addEventListener("click",async e=>{
     }catch(err){alert(err.message)}}
 });
 
+/* ================= R1 ================= */
+let R1O=null, R1={folder:"",job:null}, r1files=[], r1timer=null, r1ready=false, R1X=new Set(), r1all=false;
+const r1Busy=()=>!!(R1.job&&R1.job.items.some(i=>i.running));
+function r1Models(){
+  $("#r1model").innerHTML=R1O.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
+  const f=R1O.text_models.find(t=>t.available); if(f)$("#r1model").value=f.id;
+}
+function r1Effs(){
+  const t=R1O.text_models.find(x=>x.id===$("#r1model").value); if(!t)return;
+  const prev=$("#r1eff").value;
+  $("#r1eff").innerHTML=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
+  $("#r1eff").value=t.efforts.includes(prev)?prev:(t.efforts.includes("low")?"low":t.efforts[0]);
+}
+async function r1Init(){
+  if(r1ready)return; r1ready=true;
+  try{R1O=await api("/api/r1/options")}catch(e){$("#r1msg").textContent=e.message;r1ready=false;return}
+  r1Models(); r1Effs();
+  $("#r1size").innerHTML=R1O.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  $("#r1b").value=R1O.prompt_b; r1cc();
+  $("#r1model").onchange=()=>{r1Effs();r1Refresh()};
+  ["#r1eff","#r1count","#r1size"].forEach(i=>$(i).addEventListener("input",r1Refresh));
+  $("#r1a").addEventListener("input",()=>{r1cc();r1Refresh()});
+  $("#r1b").addEventListener("input",()=>{r1cc();r1Preview()});
+  $("#r1breset").onclick=()=>{$("#r1b").value=R1O.prompt_b;r1cc();r1Preview()};
+  $("#r1file").onchange=e=>{r1Add(e.target.files);e.target.value=""};
+  const d=$("#r1drop");
+  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
+  d.addEventListener("drop",e=>r1Add(e.dataTransfer.files));
+  $("#r1thumbs").addEventListener("click",e=>{const b=e.target.closest("[data-r1rm]"); if(b){e.preventDefault();r1files.splice(+b.dataset.r1rm,1);r1Thumbs();r1Refresh()}});
+  $("#r1go").onclick=()=>r1Prompts("");
+  $("#r1img").onclick=r1MakeImages;
+  $("#r1New").onclick=r1Reset;
+  $("#r1tiles").addEventListener("click",r1TileClick);
+  r1Refresh();
+}
+function r1cc(){["r1a","r1b"].forEach(t=>{$("#cc_"+t).textContent=$("#"+t).value.length.toLocaleString("en-IN")})}
+function r1Add(list){
+  for(const f of Array.from(list||[])){ if(!/^image\//.test(f.type))continue; f._url=URL.createObjectURL(f); r1files.push(f); }
+  r1Thumbs(); r1Refresh();
+}
+function r1Thumbs(){
+  $("#r1thumbs").innerHTML=r1files.map((f,i)=>`<figure style="margin:0;position:relative"><img src="${f._url}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px"><button type="button" class="ghost" data-r1rm="${i}" title="Remove" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:14px;line-height:1.3">&times;</button></figure>`).join("");
+}
+function r1Reset(){
+  clearTimeout(r1timer); R1={folder:"",job:null}; r1files=[]; r1Thumbs();
+  $("#r1name").value=""; $("#r1tiles").classList.add("hide"); $("#r1imgs").classList.add("hide");
+  $("#r1msg").textContent=""; $("#r1imgmsg").textContent=""; r1Render(); r1Refresh();
+}
+function r1Estimate(){
+  const t=R1O&&R1O.text_models.find(x=>x.id===$("#r1model").value); if(!t)return 0;
+  const n=Math.max(1,+$("#r1count").value||1);
+  return (R1O.est_in*t.rate_in+((R1O.est_out[$("#r1eff").value]||0)+n*150)*t.rate_out)/1e6*R1O.usd_to_inr;
+}
+function r1Refresh(){
+  if(!R1O)return;
+  const has=!!(R1.folder&&R1.job), nph=has?R1.job.items.length:r1files.length, busy=r1Busy();
+  $("#r1Upload").classList.toggle("hide",has);
+  $("#r1HasRun").classList.toggle("hide",!has);
+  if(has)$("#r1HasRun").textContent=`${nph} photo${nph===1?"":"s"} in this run. Press the button again to write more prompts for all photos (each run is kept), or use "More prompts" under one photo.`;
+  const ok=$("#r1a").value.trim()&&nph&&!busy&&R1O.text_models.some(t=>t.id===$("#r1model").value&&t.available);
+  $("#r1go").disabled=!ok; $("#r1go").textContent=has?"Write more prompts":"Write the prompts";
+  $("#r1est").innerHTML=nph?`${nph} text call${nph===1?"":"s"} · rough estimate <b>≈ ${inr(r1Estimate()*nph)}</b>`:"";
+  const sel=has?R1.job.items.filter(i=>i.sel).length:0;
+  const [w,h]=$("#r1size").value.split("x").map(Number), px=w*h/1048576;
+  $("#r1img").disabled=!(sel&&!busy&&$("#r1b").value.trim().length+1);
+  $("#r1imgest").innerHTML=sel?`${sel} image${sel===1?"":"s"} · rough estimate <b>≈ ${inr(sel*R1O.est_image_inr_1024*px)}</b>`:(has?"Choose a tile for at least one photo.":"");
+}
+async function r1Prompts(indexes){
+  $("#r1msg").textContent=""; $("#r1go").disabled=true;
+  try{
+    if(!R1.folder){
+      const fd=new FormData(); r1files.forEach(f=>fd.append("images",f)); fd.append("name",$("#r1name").value.trim());
+      const c=await api("/api/r1/create",{method:"POST",body:fd});
+      R1.folder=c.folder; R1.job=await api("/api/r1/"+encodeURIComponent(c.folder));
+    }
+    const fd=new FormData(); fd.append("prompt_a",$("#r1a").value); fd.append("text_model",$("#r1model").value);
+    fd.append("effort",$("#r1eff").value); fd.append("count",$("#r1count").value||"5"); fd.append("indexes",indexes);
+    await api(`/api/r1/${encodeURIComponent(R1.folder)}/prompts`,{method:"POST",body:fd});
+    r1Poll();
+  }catch(e){$("#r1msg").textContent=e.message; r1Refresh()}
+}
+function r1Poll(){
+  clearTimeout(r1timer);
+  const tick=async()=>{
+    try{R1.job=await api("/api/r1/"+encodeURIComponent(R1.folder)); r1Render();
+      if(r1Busy()){r1timer=setTimeout(tick,2000);return}
+    }catch(e){r1timer=setTimeout(tick,4000)}
+  };
+  tick();
+}
+async function r1Open(folder){
+  clearTimeout(r1timer); R1={folder,job:null}; r1files=[];
+  await r1Init();
+  try{R1.job=await api("/api/r1/"+encodeURIComponent(folder))}catch(e){$("#r1msg").textContent=e.message;return}
+  if(R1.job.prompt_a)$("#r1a").value=R1.job.prompt_a;
+  if(R1.job.prompt_b)$("#r1b").value=R1.job.prompt_b;
+  if(R1.job.size)$("#r1size").value=R1.job.size;
+  r1cc(); r1Render(); if(r1Busy())r1Poll();
+}
+function r1Render(){
+  const j=R1.job;
+  $("#r1Label").textContent=j?`${j.name} · ${j.created}`:"New R1 run";
+  $("#r1Cost").classList.toggle("hide",!j); if(j)$("#r1Cost").textContent="cost so far "+inr(j.total_inr);
+  if(!j){r1Refresh();return}
+  $("#r1tiles").classList.remove("hide");
+  $("#r1tiles").innerHTML=`<label class="hint" style="display:block;margin:0 0 8px"><input type="checkbox" id="r1allx" ${r1all?"checked":""}> Show every prompt in full</label>`+j.items.map((it,i)=>{
+    const runs=it.runs.slice().reverse().map(r=>`<div class="r1run"><div class="hint" style="margin:0 0 2px">Run ${r.n} · ${esc(r.text_model)} · ${esc(r.effort)} · asked for ${r.count} · ${inr(r.cost_inr)} · ${esc(r.created)}</div>
+      ${r.error?`<div class="err">${esc(r.error)}</div>`:""}
+      <div class="tiles">${r.tiles.map((t,k)=>`<div class="tile ${it.sel&&it.sel.run===r.n&&it.sel.tile===k?"sel":""} ${r1all||R1X.has(i+":"+r.n+":"+k)?"open":""}" data-pick="${i}:${r.n}:${k}"><span class="xp" data-xp="${i}:${r.n}:${k}">${r1all||R1X.has(i+":"+r.n+":"+k)?"Collapse":"Expand"}</span><span class="k">Prompt ${k+1}${it.sel&&it.sel.run===r.n&&it.sel.tile===k?" · chosen":""}</span>${esc(t)}</div>`).join("")}</div></div>`).join("");
+    return `<div class="r1photo"><div class="r1head"><figure style="width:72px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:8px"></figure>
+      <div><b>Photo ${i+1}</b><div class="hint" style="margin:0">${esc(it.orig_name)}</div></div>
+      ${it.running==="prompts"?'<span class="chip run">writing prompts...</span>':""}
+      <button class="ghost" data-more="${i}" ${r1Busy()?"disabled":""}>More prompts</button></div>
+      ${it.error&&it.running!=="prompts"?`<div class="err">${esc(it.error)}</div>`:""}
+      ${runs||(it.running==="prompts"?'<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;margin-right:8px;width:16px;height:16px"></span>The text model is reading the photo...</div>':'<div class="hint">No prompts yet.</div>')}</div>`;
+  }).join("");
+  const withImg=j.items.some(it=>it.images.length||it.running==="image"||it.sel);
+  $("#r1imgs").classList.toggle("hide",!withImg);
+  $("#r1imgs").innerHTML=j.items.map((it,i)=>{
+    if(!(it.images.length||it.running==="image"||it.sel))return "";
+    const [w,h]=(j.size||"1088x1360").split("x").map(Number);
+    const cur=chosenText(it);
+    return `<div class="r1photo"><div class="r1head"><figure style="width:56px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure><b>Photo ${i+1}</b>
+       ${it.running==="image"?'<span class="chip run">making the image...</span>':""}</div>
+      ${cur?`<details open><summary class="hint" style="cursor:pointer">Prompt C that will be sent now (Prompt B, then the chosen prompt)</summary><div class="box"><b>Prompt C</b><pre data-pc="${i}">${esc(($("#r1b").value.trim()+"\n\n"+cur).trim())}</pre></div></details>`:'<div class="hint">No tile chosen for this photo yet.</div>'}
+      ${it.error&&it.running!=="image"&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px">
+       ${it.running==="image"?`<div class="ph" style="aspect-ratio:${w}/${h};width:200px"><div class="spin"></div>Generating...</div>`:""}
+       ${it.images.slice().reverse().map(r=>`<div style="display:flex;gap:14px;flex-wrap:wrap;width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)"><figure style="width:200px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · ${inr(r.cost_inr)}<br><span class="hint">prompt ${r.tile_idx+1} of run ${r.run_n} (${esc(r.text_model)} · ${esc(r.effort)})</span></figcaption></figure>
+         <div style="flex:1;min-width:260px"><b>Final prompt sent to the image model (Prompt C)</b> <span class="hint">· ${esc(r.size||"")} · ${r.prompt_c.length.toLocaleString("en-IN")} characters</span>
+          <pre style="white-space:pre-wrap;font-size:13px;max-height:340px;overflow:auto;margin:6px 0 0">${esc(r.prompt_c)}</pre>
+          <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Only the chosen prompt (the part added after Prompt B)</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(r.prompt_a_output)}</pre></details></div></div>`).join("")}
+      </div></div>`;
+  }).join("");
+  r1Refresh();
+}
+function chosenText(it){
+  if(!it.sel)return "";
+  const r=it.runs.find(x=>x.n===it.sel.run); return r?(r.tiles[it.sel.tile]||""):"";
+}
+function r1Preview(){
+  if(!R1.job)return;
+  $$("#r1imgs pre[data-pc]").forEach(p=>{p.textContent=($("#r1b").value.trim()+"\n\n"+chosenText(R1.job.items[+p.dataset.pc])).trim()});
+}
+async function r1TileClick(e){
+  const x=e.target.closest("[data-xp]");
+  if(x){e.stopPropagation(); const k=x.dataset.xp; if(r1all){r1all=false; R1.job.items.forEach((it,i)=>it.runs.forEach(r=>r.tiles.forEach((_,t)=>R1X.add(i+":"+r.n+":"+t))))}
+    R1X.has(k)?R1X.delete(k):R1X.add(k); r1Render(); return}
+  if(e.target.id==="r1allx"){r1all=e.target.checked; if(!r1all)R1X.clear(); r1Render(); return}
+  const m=e.target.closest("[data-more]");
+  if(m){await r1Prompts(m.dataset.more); return}
+  const t=e.target.closest("[data-pick]"); if(!t||r1Busy())return;
+  const [i,run,tile]=t.dataset.pick.split(":").map(Number);
+  try{
+    await api(`/api/r1/${encodeURIComponent(R1.folder)}/pick`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index:i,run,tile})});
+    R1.job.items[i].sel={run,tile}; r1Render();
+  }catch(err){$("#r1imgmsg").textContent=err.message}
+}
+async function r1MakeImages(){
+  $("#r1imgmsg").textContent=""; $("#r1img").disabled=true;
+  const fd=new FormData(); fd.append("prompt_b",$("#r1b").value); fd.append("size",$("#r1size").value);
+  try{
+    await api(`/api/r1/${encodeURIComponent(R1.folder)}/image`,{method:"POST",body:fd});
+    r1Poll();
+  }catch(e){$("#r1imgmsg").textContent=e.message; r1Refresh()}
+}
+
 /* ================= HISTORY ================= */
 let HIST=[]; const HSEL=new Set();
 function histShow(){
   const f=$("input[name=hfilter]:checked").value, q=$("#hsearch").value.trim().toLowerCase();
-  const rows=HIST.filter(r=>(f==="all"||r.type===f)&&(!q||[r.title,r.folder,r.created,(r.categories||[]).join(" "),(r.models||[]).join(" ")].join(" ").toLowerCase().includes(q)));
+  const rows=HIST.filter(r=>(f==="all"||r.type===f)&&(!q||[r.title,r.folder,r.created,(r.categories||[]).join(" "),(r.models||[]).join(" "),(r.selected||[]).map(x=>x.text).join(" ")].join(" ").toLowerCase().includes(q)));
   const cost=rows.reduce((a,r)=>a+(r.cost_inr||0),0);
   $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
   const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`;
   $("#hlist").innerHTML=rows.length?rows.map(r=>{
-    const kind=r.type==="single"?"Single run":r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const kind=r.type==="single"?"Single run":r.type==="r1"?"R1":r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
     const st=r.state;
-    const open=r.type==="single"?"single":r.type==="multi"?"multi":"batch";
-    const more=r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+    const open=r.type==="single"?"single":r.type==="multi"?"multi":r.type==="r1"?"r1":"batch";
+    const more=r.type==="r1"?(r.selected||[]).map(x=>`<div class="hm"><b>Selected prompt${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
       ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
     const sel=r.type==="single"?`<label class="hint" style="display:block;margin-top:4px"><input type="checkbox" data-hsel="${esc(r.folder)}" ${HSEL.has(r.folder)?"checked":""}> select to compare</label>`:"";
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
-       <div class="hm">${esc(r.created)} · ${r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="hm">${esc(r.created)} · ${r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
        ${sel}<div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:r.type==="multi"?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||r.type==="r1")?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -1062,6 +1293,7 @@ $("#hlist").addEventListener("click",async e=>{
   const o=e.target.closest("[data-hopen]");
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
+    else if(kind==="r1"){$('nav button[data-tab="r1"]').click(); r1Open(folder)}
     else if(kind==="multi"){gcache={}; $('nav button[data-tab="new"]').click(); pollGroup(folder); $("#result").scrollIntoView({behavior:"smooth"})}
     else{$('nav button[data-tab="batch"]').click(); showBatch(folder)}
     return}

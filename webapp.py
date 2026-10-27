@@ -546,6 +546,8 @@ def history():
             "images_total": len(ents), "images_done": sum(1 for e in ents if e["state"] == "done"),
             "failed": sum(1 for e in ents if e["state"] == "error"),
             "cost_inr": round(cost, 4), "models": [], "categories": []})
+    import r1
+    rows.extend(r1.r1_list())
     for b in batch.batch_list()["batches"]:
         rows.append({
             "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],

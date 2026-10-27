@@ -1,0 +1,10 @@
+Use the reference image only for the product itself: its exact design, shape, pattern, colour, material, texture, printed words and number of pieces. Do not copy its arrangement or background.
+
+Count how many separate items are in the reference. Items that touch, overlap, stack or are tangled together are still separate items. For each item, note its exact shape, size, outline, design, motifs and details. Every item must appear in the final image as a separate, complete object, with its own shape and design exactly as in the reference. Never merge items, blend their designs, change their shape, or add or remove any item. If items are identical, they must stay identical; if they differ, each must keep its own differences. Describe each item individually in the image prompt, and arrange them as this category is professionally displayed, with each item clearly visible and distinct.
+
+Remove the product from the current background and current packaging don’t confuse the background as part of the product. Do not copy the reference's arrangement or background. Remove completely: plastic cards, price tags, QR codes, stickers, threads, plastic wrap, hands, fingers, mannequin, hanger and the original background.
+Keep everything that is part of the product itself, such as its own tassels, cords or printed retail pack.
+
+The current  reference product is photographed badly . It is tilted, crooked, asymmetrical, twisted, tangled, folded unevenly, shifted to one side, dis-balanced or heaped incorrectly. You must re-create the same product in its perfect intended professional form: perfectly centered, symmetrical, even, balanced, untwisted, smooth, neat, with natural gravity and drape as it should be used or worn in real life. Same design, but perfect arrangement like a premium brand catalog for this product category.Do not make it shinier, newer, different color, or add extra details. Fix only glare and blur. For fabric products, smooth harsh messy wrinkles but keep natural drape.
+on a matching name plate
+ Don't make any additional claim or extra text.

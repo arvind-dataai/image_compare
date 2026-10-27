@@ -465,3 +465,5 @@ from batch import router as batch_router  # noqa: E402  (batch mode: one prompt 
 app.include_router(batch_router)
 from sceneflow import router as scene_router  # noqa: E402  (batch scene flow + scene library)
 app.include_router(scene_router)
+from r1 import router as r1_router  # noqa: E402  (R1 tab: prompt A -> several prompts -> pick one -> image)
+app.include_router(r1_router)
