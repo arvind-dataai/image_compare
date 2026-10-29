@@ -1,0 +1,102 @@
+{
+ "categories": {
+  "Bags and Luggage": {
+   "subcategories": {
+    "Backpacks": {
+     "scenes": [
+      {
+       "status": "unused",
+       "text": "CONCEPT: Minimalist Studio Desk Setup\nSETTING: Bright creative studio corner, mid-morning.\nSURFACE AND BACKGROUND: Surface is a natural pale oak desk; background is an off-white limewashed wall.\nPRODUCT PRESENTATION: A backpack sits upright on the oak desk, turned at a three-quarter angle to display its front and side structure.\nCOMPOSITION: Product positioned on the right third with a wide calm margin; the left side is left empty for text.\nCAMERA: Eye-level, medium close-up, 50mm lens.\nLIGHTING: Soft directional daylight from a high window on the left, casting a subtle contact shadow beneath the base.\nCOLOUR PALETTE: Pale oak tan, warm off-white, and muted charcoal. The dark matte backpack separates sharply against the bright pale wall and table.\nPROPS: A slim ceramic pen cup and a closed beige linen notebook placed to the far right, softly blurred.\nMOOD AND STYLE: Professional, modern, and uncluttered still-life advertising.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "85dedfdf",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Boutique Hotel Bench\nSETTING: Sunlit boutique hotel entryway, late morning.\nSURFACE AND BACKGROUND: Light travertine stone flooring; background is a fluted blonde maple wood wall.\nPRODUCT PRESENTATION: A backpack stands upright centered on a low, smooth ash wood bench, facing forward.\nCOMPOSITION: Placed slightly left of center; generous negative space on the right for typography.\nCAMERA: Straight-on shot at bench height, 70mm lens with shallow depth of field.\nLIGHTING: Diffused morning light from the right with gentle fill from the front; crisp separation from the warm wood backdrop.\nCOLOUR PALETTE: Cream travertine, honey blonde maple, and soft beige. The black exterior pops against the light neutral textures.\nPROPS: A rolled linen coat placed neatly to the far left of the bench, slightly out of focus.\nMOOD AND STYLE: Sophisticated travel luxury, warm and airy aesthetic.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "db134938",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Executive Lounge Chair\nSETTING: Designer transit lounge, early afternoon.\nSURFACE AND BACKGROUND: Surface is a warm caramel-tan leather lounge chair; background is a soft beige micro-cement wall.\nPRODUCT PRESENTATION: A backpack rests upright in the seat of the chair, angled slightly forward.\nCOMPOSITION: Centered horizontally, leaving the upper half of the frame clean for editorial copy.\nCAMERA: Low angle looking slightly upward at the chair, 85mm lens.\nLIGHTING: Balanced architectural ceiling spot creating a clear highlight on the bag's curves and a grounded contact shadow on the leather.\nCOLOUR PALETTE: Warm caramel, light sand, and brass accents. Deep silhouette creates immediate focal contrast against the light-toned leather.\nPROPS: none\nMOOD AND STYLE: Premium executive commute, structured and refined.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "ab4bd51e",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Architect Drafting Table\nSETTING: High-ceilinged architectural studio, midday.\nSURFACE AND BACKGROUND: Smooth white matte laminate drafting table; background is a soft grey polished concrete wall.\nPRODUCT PRESENTATION: A backpack stands upright on the corner of the drafting table, angled toward the viewer.\nCOMPOSITION: Positioned on the left third with ample calm margin around its outline; right side reserved for text.\nCAMERA: Table-height shot, three-quarter perspective, 50mm lens.\nLIGHTING: Neutral studio softbox lighting from above left, rendering clean contours and matte texture separation.\nCOLOUR PALETTE: Light concrete grey, pure white, and brushed silver. High-contrast monochromatic isolation makes the backpack the immediate hero.\nPROPS: A frosted acrylic triangular scale ruler laid flat on the far right, blurred.\nMOOD AND STYLE: Industrial precision, modern minimalist lifestyle.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "6da0b196",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "used",
+       "text": "CONCEPT: Contemporary Cafe Corner\nSETTING: Quiet urban espresso bar, mid-afternoon.\nSURFACE AND BACKGROUND: Matte light-grey terrazzo tabletop; background is a pale sage-green painted brick wall.\nPRODUCT PRESENTATION: A backpack sits upright on a sturdy bentwood chair tucked partly beside the table, front facing forward.\nCOMPOSITION: Off-center to the right, framing clean negative space across the sage-green wall on the left.\nCAMERA: Straight-on, medium shot at chest height, 45mm lens.\nLIGHTING: Golden ambient side light with a soft reflector fill, accentuating surface textures.\nCOLOUR PALETTE: Pale sage green, neutral white terrazzo, and light beechwood. The dark exterior establishes clear contrast against the pastel backdrop.\nPROPS: A small white ceramic coffee cup in the distant mid-ground, heavily blurred.\nMOOD AND STYLE: Casual metropolitan lifestyle, warm and approachable.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "aa1b96db",
+       "created": "2026-10-29T16:04:07",
+       "file": "out_001_4_1.png",
+       "photo_key": "r3_1_r3/in_001_4.webp"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Modern Gallery Plinth\nSETTING: Contemporary art gallery nook, morning.\nSURFACE AND BACKGROUND: Sandstone-textured floor; background is a flat muted terracotta partition wall.\nPRODUCT PRESENTATION: A backpack is displayed upright on a low, geometric matte-sand display plinth.\nCOMPOSITION: Centered in the lower frame with substantial calm wall space above for text insertion.\nCAMERA: Direct eye-level, wide-normal 65mm lens, crisp edge-to-edge focus.\nLIGHTING: Clean overhead gallery spotlights creating defined, soft-edged drop shadows on the plinth.\nCOLOUR PALETTE: Warm terracotta, pale sand, and limestone. Matte black construction stands out boldly against the earthen, desaturated backdrop.\nPROPS: none\nMOOD AND STYLE: Sculptural, editorial, and design-led presentation.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "49041d80",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Airy Co-Working Library\nSETTING: Scandinavian-inspired shared library, afternoon.\nSURFACE AND BACKGROUND: Pale birch wood study table; background is an out-of-focus row of muted linen book spines.\nPRODUCT PRESENTATION: A backpack stands upright on the wide birch bench alongside the table, angled to reveal its depth.\nCOMPOSITION: Product grounded on the left; calm, diffuse background on the right ready for branding.\nCAMERA: Slightly elevated angle, 50mm focal length.\nLIGHTING: Broad diffused window light illuminating the front face smoothly, keeping shadows transparent.\nCOLOUR PALETTE: Pale birch yellow, oatmeal linen, and soft white. Clear silhouette separation against light organic tones.\nPROPS: A closed slate-grey hardbound sketchbook placed in the distant right background.\nMOOD AND STYLE: Intellectual, productive, and calm Nordic simplicity.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "40f84a47",
+       "created": "2026-10-29T16:04:07"
+      },
+      {
+       "status": "unused",
+       "text": "CONCEPT: Modern Apartment Console\nSETTING: Bright residential entrance hallway, late afternoon.\nSURFACE AND BACKGROUND: Surface is a light grey marble console table; background is a soft eggshell plaster wall.\nPRODUCT PRESENTATION: A backpack stands firmly upright on the marble surface, facing direct front.\nCOMPOSITION: Positioned on the right side of the frame; clear open field across the left.\nCAMERA: Level horizontal perspective, 50mm prime lens.\nLIGHTING: Gentle wrap-around window light providing crisp rim highlights along the upper contour.\nCOLOUR PALETTE: Cool marble grey, eggshell white, and brushed chrome. Sharp tonal break between the dark subject and pale architectural elements.\nPROPS: A small matte ceramic catchall tray in the far background, out of focus.\nMOOD AND STYLE: Premium everyday luxury, clean and functional elegance.",
+       "photo": "4.webp",
+       "folder": "r3_1_r3",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "3300b760",
+       "created": "2026-10-29T16:04:07"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

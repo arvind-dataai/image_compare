@@ -181,6 +181,8 @@ details.adv[open]>summary{margin-bottom:10px}
   <button data-tab="new" class="on">New run</button>
   <button data-tab="batch">Batch</button>
   <button data-tab="r1">R1</button>
+  <button data-tab="r2">R2</button>
+  <button data-tab="r3">R3</button>
   <button data-tab="brev">Batch review</button>
   <button data-tab="lib">Scene library</button>
   <button data-tab="hist">History</button>
@@ -362,6 +364,9 @@ details.adv[open]>summary{margin-bottom:10px}
  </div>
 </section>
 
+<section id="tab-r2" class="hide"></section>
+<section id="tab-r3" class="hide"></section>
+
 <!-- ============ BATCH REVIEW ============ -->
 <section id="tab-brev" class="hide">
  <div class="card">
@@ -382,7 +387,18 @@ details.adv[open]>summary{margin-bottom:10px}
 
 <!-- ============ SCENE LIBRARY ============ -->
 <section id="tab-lib" class="hide">
- <div class="card"><p class="hint" style="margin:0">Every scene the scene flow has written, grouped as category &gt; subcategory. Later runs on the same subcategory are told to be different from these.</p></div>
+ <div class="card">
+  <div class="rvbar">
+   <div class="seg" style="margin:0">
+    <label><input type="radio" name="libsel" value="scene" checked>Batch scene flow</label>
+    <label><input type="radio" name="libsel" value="r2">R2 library</label>
+    <label><input type="radio" name="libsel" value="r3">R3 library</label>
+   </div>
+   <button class="ghost" id="libreload">Refresh</button>
+   <span class="tot" id="libtot"></span>
+  </div>
+  <p class="hint" id="libhint" style="margin:8px 0 0"></p>
+ </div>
  <div id="liblist"></div>
 </section>
 
@@ -395,6 +411,8 @@ details.adv[open]>summary{margin-bottom:10px}
     <label><input type="radio" name="hfilter" value="single">Single runs</label>
     <label><input type="radio" name="hfilter" value="multi">Multi-prompt</label>
     <label><input type="radio" name="hfilter" value="r1">R1</label>
+    <label><input type="radio" name="hfilter" value="r2">R2</label>
+    <label><input type="radio" name="hfilter" value="r3">R3</label>
     <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
    </div>
    <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
@@ -424,8 +442,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","batch","r1","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
+  ["new","batch","r1","r2","r3","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="r2"||b.dataset.tab==="r3")rInit(b.dataset.tab); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
 });
 
 /* ---------- lightbox ---------- */
@@ -1234,6 +1252,278 @@ async function r1MakeImages(){
   }catch(e){$("#r1imgmsg").textContent=e.message; r1Refresh()}
 }
 
+/* ================= R2 / R3 (identify -> scenes -> image) ================= */
+const RS={};
+const rq=(kind,name)=>$("#tab-"+kind+" [data-r="+name+"]");
+const rIsR=t=>/^r\d$/.test(t||"");
+function rTpl(kind){
+  const K=kind.toUpperCase(), r3=kind==="r3";
+  return `
+ <div class="hero-lite"><span class="t" data-r="label">New ${K} run</span><span class="chip hide" data-r="cost"></span><button class="ghost" data-r="new">Start a new run</button></div>
+
+ <div class="stepcard s1">
+  <div class="stephead"><span class="num">1</span><div><b>Step 1: Identify the product</b><div class="hint" style="margin:0">The text model names the category and subcategory and tells you if they already exist in the ${K} scene library or are new</div></div></div>
+  <div class="form"><div>
+    <div data-r="upload"><h2>Product photos <span class="hint">(one or many; each photo is its own product)</span></h2>
+     <label class="drop" data-r="drop"><input type="file" data-r="file" accept="image/png,image/jpeg,image/webp" multiple class="hide"><div>Click or drop the photos here (PNG, JPEG, WEBP)</div></label>
+     <div data-r="thumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+     <input data-r="name" type="text" placeholder="Run name (optional)" style="margin-top:8px;width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px"></div>
+    <div class="hint hide" data-r="hasrun"></div>
+    <div class="pair" style="margin-top:10px"><div><div class="sub" style="margin:0 0 3px">Text model</div><select data-r="m1"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select data-r="e1"></select></div></div>
+   </div><div>
+    <h2>Prompt for identification <button class="ghost" data-r="reset1" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea data-r="p1" style="min-height:220px"></textarea><div class="cc"><span data-r="cc1">0</span> characters</div>
+    <p class="hint">The system adds the categories already in the ${K} library and the reply format after this text.</p>
+   </div></div>
+  <div class="runrow"><button class="primary" data-r="go1" disabled>Run step 1</button><span class="est" data-r="est1"></span><span class="msg" data-r="msg1"></span></div>
+  <div data-r="res1" class="hide" style="margin-top:14px"></div>
+ </div>
+
+ <div class="stepcard s2">
+  <div class="stephead"><span class="num">2</span><div><b>Step 2: ${r3?"Scenes from the library, or write new ones":"Write several scenes and pick one"}</b><div class="hint" style="margin:0">${r3?"Unused scenes already in the "+K+" library for the photo's category and subcategory are shown as tiles. Writing new scenes is optional: the AI first analyses all existing scenes, then writes different ones, and every new scene is saved to the library.":"The AI analyses the scenes already saved in the "+K+" library for this category and subcategory, then writes several different ones. The scene you pick is saved to the library."}</div></div></div>
+  <div class="form"><div>
+    <div class="pair"><div><div class="sub" style="margin:0 0 3px">Text model</div><select data-r="m2"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select data-r="e2"></select></div></div>
+    <p class="hint">How many scenes to write is part of the prompt (the default asks for 8).</p>
+   </div><div>
+    <h2>Prompt for writing scenes <button class="ghost" data-r="reset2" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea data-r="p2" style="min-height:220px"></textarea><div class="cc"><span data-r="cc2">0</span> characters</div>
+    <p class="hint">The system adds the category, subcategory, description, the existing scenes and the reply format after this text.</p>
+   </div></div>
+  <div class="runrow"><button class="primary" data-r="go2" disabled>${r3?"Write new scenes":"Run step 2"}</button><span class="est" data-r="est2"></span><span class="msg" data-r="msg2"></span></div>
+  <div data-r="res2" class="hide" style="margin-top:14px"></div>
+ </div>
+
+ <div class="stepcard s3">
+  <div class="stephead"><span class="num">3</span><div><b>Step 3: Your prompt + the chosen scene: make the image</b><div class="hint" style="margin:0">Final prompt = your prompt, then the chosen scene. It goes with the photo to gpt-image-2.5-sunburst, low.</div></div></div>
+  <div class="form"><div>
+    <h2>Your prompt <button class="ghost" data-r="reset3" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea data-r="p3" style="min-height:240px"></textarea><div class="cc"><span data-r="cc3">0</span> characters</div>
+   </div><div>
+    <div class="sub" style="margin:0 0 3px">Size</div><select data-r="sz"></select>
+    <p class="hint">Photos without a chosen scene are skipped. Make an image again, or choose another scene and make another; every image stays in History with its final prompt and cost.</p>
+   </div></div>
+  <div class="runrow"><button class="primary" data-r="go3" disabled>Make the images</button><span class="est" data-r="est3"></span><span class="msg" data-r="msg3"></span></div>
+  <div data-r="res3" class="hide" style="margin-top:14px"></div>
+ </div>
+
+ <details class="card" data-r="libbox" style="margin-top:6px"><summary style="cursor:pointer"><b>${K} scene library</b> <span class="hint">(its own library, separate from the others)</span></summary><div data-r="lib" style="margin-top:10px"></div></details>`;
+}
+const rBusy=kind=>{const j=RS[kind].job;return !!(j&&j.items.some(i=>i.running))};
+function rModels(kind,sel){
+  const S=RS[kind], el=rq(kind,sel);
+  el.innerHTML=S.O.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
+  const f=S.O.text_models.find(t=>t.available); if(f)el.value=f.id;
+}
+function rEffs(kind,ms,es,def){
+  const S=RS[kind], t=S.O.text_models.find(x=>x.id===rq(kind,ms).value); if(!t)return;
+  const el=rq(kind,es), prev=el.value;
+  el.innerHTML=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
+  el.value=t.efforts.includes(prev)?prev:(t.efforts.includes(def)?def:t.efforts[0]);
+}
+async function rInit(kind){
+  const S=RS[kind]||(RS[kind]={O:null,folder:"",job:null,files:[],timer:null,ready:false,X:new Set(),all:false});
+  if(S.ready)return; S.ready=true;
+  $("#tab-"+kind).innerHTML=rTpl(kind);
+  try{S.O=await api(`/api/rf/${kind}/options`)}catch(e){rq(kind,"msg1").textContent=e.message;S.ready=false;return}
+  const O=S.O, R=n=>rq(kind,n);
+  rModels(kind,"m1"); rModels(kind,"m2"); rEffs(kind,"m1","e1","low"); rEffs(kind,"m2","e2","medium");
+  R("sz").innerHTML=O.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  R("p1").value=O.prompt_id; R("p2").value=O.prompt_scene; R("p3").value=O.prompt_b; rCC(kind);
+  R("reset1").onclick=()=>{R("p1").value=O.prompt_id;rCC(kind)}; R("reset2").onclick=()=>{R("p2").value=O.prompt_scene;rCC(kind)}; R("reset3").onclick=()=>{R("p3").value=O.prompt_b;rCC(kind);rPreview(kind)};
+  R("m1").onchange=()=>{rEffs(kind,"m1","e1","low");rRefresh(kind)}; R("m2").onchange=()=>{rEffs(kind,"m2","e2","medium");rRefresh(kind)};
+  ["e1","e2","sz"].forEach(n=>R(n).addEventListener("input",()=>rRefresh(kind)));
+  ["p1","p2"].forEach(n=>R(n).addEventListener("input",()=>{rCC(kind);rRefresh(kind)})); R("p3").addEventListener("input",()=>{rCC(kind);rPreview(kind)});
+  R("file").onchange=e=>{rAdd(kind,e.target.files);e.target.value=""};
+  const d=R("drop");
+  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
+  d.addEventListener("drop",e=>rAdd(kind,e.dataTransfer.files));
+  R("thumbs").addEventListener("click",e=>{const b=e.target.closest("[data-rm]"); if(b){e.preventDefault();S.files.splice(+b.dataset.rm,1);rThumbs(kind);rRefresh(kind)}});
+  R("go1").onclick=()=>rRun(kind,1,""); R("go2").onclick=()=>rRun(kind,2,""); R("go3").onclick=()=>rRun(kind,3,"");
+  R("new").onclick=()=>rReset(kind);
+  R("libbox").addEventListener("toggle",()=>{if(R("libbox").open)rLoadLib(kind)});
+  $("#tab-"+kind).addEventListener("click",e=>rClick(kind,e));
+  rRender(kind);
+}
+function rCC(kind){[1,2,3].forEach(n=>{rq(kind,"cc"+n).textContent=rq(kind,"p"+n).value.length.toLocaleString("en-IN")})}
+function rAdd(kind,list){
+  const S=RS[kind];
+  for(const f of Array.from(list||[])){ if(!/^image\//.test(f.type))continue; f._url=URL.createObjectURL(f); S.files.push(f); }
+  rThumbs(kind); rRefresh(kind);
+}
+function rThumbs(kind){
+  rq(kind,"thumbs").innerHTML=RS[kind].files.map((f,i)=>`<figure style="margin:0;position:relative"><img src="${f._url}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px"><button type="button" class="ghost" data-rm="${i}" title="Remove" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:14px;line-height:1.3">&times;</button></figure>`).join("");
+}
+function rReset(kind){
+  const S=RS[kind]; clearTimeout(S.timer); S.folder=""; S.job=null; S.files=[]; rThumbs(kind);
+  rq(kind,"name").value=""; ["msg1","msg2","msg3"].forEach(n=>rq(kind,n).textContent=""); rRender(kind);
+}
+function rCost(kind,step,eff){
+  const S=RS[kind], t=S.O.text_models.find(x=>x.id===rq(kind,step===1?"m1":"m2").value); if(!t)return 0;
+  const key=step===1?"id":"scene", extra=step===1?200:2500;
+  return (S.O.est_in[key]*t.rate_in+((S.O.est_out[rq(kind,step===1?"e1":"e2").value]||0)+extra)*t.rate_out)/1e6*S.O.usd_to_inr;
+}
+function rRefresh(kind){
+  const S=RS[kind]; if(!S||!S.O)return; const R=n=>rq(kind,n), j=S.job, busy=rBusy(kind), O=S.O;
+  const n=j?j.items.length:S.files.length;
+  R("upload").classList.toggle("hide",!!j); R("hasrun").classList.toggle("hide",!j);
+  if(j)R("hasrun").textContent=`${n} photo${n===1?"":"s"} in this run. Run step 1 again for all photos here, or use "Run again" under one photo.`;
+  const okm=id=>O.text_models.some(t=>t.id===R(id).value&&t.available);
+  R("go1").disabled=!(R("p1").value.trim()&&n&&!busy&&okm("m1")); R("go1").textContent=j?"Run step 1 again":"Run step 1";
+  R("est1").innerHTML=n?`${n} text call${n===1?"":"s"} · rough estimate <b>≈ ${inr(rCost(kind,1)*n)}</b>`:"";
+  const ids=j?j.items.filter(i=>i.current).length:0, sel=j?j.items.filter(i=>i.sel).length:0;
+  R("go2").disabled=!(ids&&R("p2").value.trim()&&!busy&&okm("m2"));
+  R("est2").innerHTML=ids?`${ids} text call${ids===1?"":"s"} · rough estimate <b>≈ ${inr(rCost(kind,2)*ids)}</b>`:(j?"Run step 1 first.":"");
+  const [w,h]=R("sz").value.split("x").map(Number), px=w*h/1048576;
+  R("go3").disabled=!(sel&&!busy);
+  R("est3").innerHTML=sel?`${sel} image${sel===1?"":"s"} · rough estimate <b>≈ ${inr(sel*O.est_image_inr_1024*px)}</b>`:(j?"Choose a scene for at least one photo.":"");
+}
+async function rRun(kind,step,indexes){
+  const S=RS[kind], R=n=>rq(kind,n), msg=R("msg"+step); msg.textContent=""; R("go"+step).disabled=true;
+  try{
+    if(!S.folder){
+      const fd=new FormData(); S.files.forEach(f=>fd.append("images",f)); fd.append("name",R("name").value.trim());
+      const c=await api(`/api/rf/${kind}/create`,{method:"POST",body:fd});
+      S.folder=c.folder; S.job=await api(`/api/rf/${kind}/${encodeURIComponent(c.folder)}`);
+    }
+    const fd=new FormData(); fd.append("indexes",indexes);
+    if(step===1){fd.append("prompt",R("p1").value);fd.append("text_model",R("m1").value);fd.append("effort",R("e1").value)}
+    if(step===2){fd.append("prompt",R("p2").value);fd.append("text_model",R("m2").value);fd.append("effort",R("e2").value)}
+    if(step===3){fd.append("prompt_b",R("p3").value);fd.append("size",R("sz").value)}
+    await api(`/api/rf/${kind}/${encodeURIComponent(S.folder)}/${["","identify","scenes","image"][step]}`,{method:"POST",body:fd});
+    rPoll(kind);
+  }catch(e){msg.textContent=e.message; rRefresh(kind)}
+}
+function rPoll(kind){
+  const S=RS[kind]; clearTimeout(S.timer);
+  const tick=async()=>{
+    try{S.job=await api(`/api/rf/${kind}/${encodeURIComponent(S.folder)}`); rRender(kind);
+      if(rBusy(kind)){S.timer=setTimeout(tick,2000);return}
+    }catch(e){S.timer=setTimeout(tick,4000)}
+  };
+  tick();
+}
+async function rReload(kind){const S=RS[kind]; S.job=await api(`/api/rf/${kind}/${encodeURIComponent(S.folder)}`); rRender(kind)}
+async function rOpen(kind,folder){
+  await rInit(kind); const S=RS[kind]; clearTimeout(S.timer); S.folder=folder; S.job=null; S.files=[];
+  try{S.job=await api(`/api/rf/${kind}/${encodeURIComponent(folder)}`)}catch(e){rq(kind,"msg1").textContent=e.message;return}
+  if(S.job.prompt_id)rq(kind,"p1").value=S.job.prompt_id;
+  if(S.job.prompt_scene)rq(kind,"p2").value=S.job.prompt_scene;
+  if(S.job.prompt_b)rq(kind,"p3").value=S.job.prompt_b;
+  if(S.job.size)rq(kind,"sz").value=S.job.size;
+  rCC(kind); rRender(kind); if(rBusy(kind))rPoll(kind);
+}
+const rTile=(kind,it,i,key,label,text,sel)=>{
+  const S=RS[kind], open=S.all||S.X.has(key);
+  return `<div class="tile ${sel?"sel":""} ${open?"open":""}" data-pick="${esc(key)}"><span class="xp" data-xp="${esc(key)}">${open?"Collapse":"Expand"}</span><span class="k">${label}${sel?" · chosen":""}</span>${esc(text)}</div>`;
+};
+function rSceneText(kind,it){
+  if(!it.sel)return "";
+  if(kind==="r3")return it.sel_text||"";
+  const r=it.scene_runs.find(x=>x.n===it.sel.run); return r?(r.tiles[it.sel.tile]||""):"";
+}
+function rPhotoTotal(it){return it.id_runs.reduce((a,r)=>a+r.cost_inr,0)+it.scene_runs.reduce((a,r)=>a+r.cost_inr,0)+it.images.reduce((a,r)=>a+r.cost_inr,0)}
+function rHead(it,i,extra){return `<div class="r1head"><figure style="width:64px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px"></figure><div><b>Photo ${i+1}</b><div class="hint" style="margin:0">${esc(it.orig_name)}</div></div>${extra||""}</div>`}
+function rRender(kind){
+  const S=RS[kind], j=S.job, R=n=>rq(kind,n), K=kind.toUpperCase();
+  R("label").textContent=j?`${j.name} · ${j.created}`:`New ${K} run`;
+  R("cost").classList.toggle("hide",!j); if(j)R("cost").textContent="cost so far "+inr(j.total_inr);
+  const r1=R("res1"), r2=R("res2"), r3=R("res3");
+  [r1,r2,r3].forEach(x=>x.classList.toggle("hide",!j));
+  if(!j){rRefresh(kind);return}
+  const busy=rBusy(kind);
+  /* step 1 */
+  r1.innerHTML=j.items.map((it,i)=>{
+    const runs=it.id_runs.slice().reverse().map(r=>{
+      if(r.error)return `<div class="iter"><div class="err">${esc(r.error)}</div><div class="hint">Run ${r.n} · ${esc(r.text_model)} · ${esc(r.effort)} · ${inr(r.cost_inr)} · ${esc(r.created)}</div></div>`;
+      const cur=it.current&&it.current.n===r.n;
+      return `<div class="iter" style="${cur?"border-color:var(--accent)":""}"><div><b>${esc(r.category)}</b> <span class="chip" style="${r.new_category?"border-color:var(--accent);color:var(--accent);font-weight:600":""}">${r.new_category?"new category created":"existing category"}</span> &rsaquo; <b>${esc(r.subcategory)}</b> <span class="chip" style="${r.new_subcategory?"border-color:var(--accent);color:var(--accent);font-weight:600":""}">${r.new_subcategory?"new subcategory created":"existing subcategory"}</span></div>
+        <div style="margin:6px 0">${esc(r.description)}</div>
+        <details><summary class="hint" style="cursor:pointer">Why this category (model's reason)</summary><div>${esc(r.reason||"")}</div></details>
+        <div class="hint" style="margin-top:4px">Run ${r.n} · model ${esc(r.text_model)} · effort ${esc(r.effort)} · cost <b>${inr(r.cost_inr)}</b> · ${esc(r.created)} ${cur?'· <b>current result</b>':`· <button class="ghost" data-act="use:${i}:${r.n}" style="padding:1px 8px;font-size:12px" ${busy?"disabled":""}>Use this result</button>`}</div></div>`;
+    }).join("");
+    return `<div class="r1photo">${rHead(it,i,(it.running==="identify"?'<span class="chip run">identifying...</span>':"")+`<button class="ghost" data-act="id:${i}" ${busy?"disabled":""}>Run again</button>`)}
+      ${it.error&&it.running!=="identify"&&!it.scene_runs.length&&!it.images.length&&!it.running&&it.id_runs.every(x=>!x.error)?`<div class="err">${esc(it.error)}</div>`:""}
+      ${runs||(it.running==="identify"?'<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;margin-right:8px;width:16px;height:16px"></span>The text model is looking at the photo...</div>':'<div class="hint">Not identified yet.</div>')}</div>`;
+  }).join("");
+  /* step 2 */
+  const allx=`<label class="hint" style="display:block;margin:0 0 8px"><input type="checkbox" data-r="allx" ${S.all?"checked":""}> Show every scene in full</label>`;
+  r2.innerHTML=allx+j.items.map((it,i)=>{
+    if(!it.current)return `<div class="r1photo">${rHead(it,i)}<div class="hint">Run step 1 for this photo first.</div></div>`;
+    const c=it.current, tag=`<span class="chip">${esc(c.category)} &rsaquo; ${esc(c.subcategory)}</span>`;
+    const runs=it.scene_runs.slice().reverse().map(r=>{
+      const own=`<div class="hint" style="margin:0 0 2px">Run ${r.n} · model ${esc(r.text_model)} · effort ${esc(r.effort)} · cost <b>${inr(r.cost_inr)}</b> · analysed ${r.existing_count} existing scene${r.existing_count===1?"":"s"} · wrote ${r.tiles.length} · ${esc(r.created)}</div>`;
+      if(r.error)return `<div class="iter">${own}<div class="err">${esc(r.error)}</div></div>`;
+      if(kind==="r3")return `<div class="iter">${own}<div class="hint" style="margin:0">These scenes were saved to the ${K} library (they appear in the tiles above while unused).</div></div>`;
+      return `<div class="r1run">${own}<div class="tiles">${r.tiles.map((t,k)=>rTile(kind,it,i,`${i}:${r.n}:${k}`,"Scene "+(k+1),t,it.sel&&it.sel.run===r.n&&it.sel.tile===k)).join("")}</div></div>`;
+    }).join("");
+    let lib="";
+    if(kind==="r3"){
+      const un=it.lib_unused||[];
+      lib=`<div style="margin:6px 0 2px"><b>Unused scenes in the library (${un.length})</b> <span class="hint">· ${it.lib_total||0} scene${(it.lib_total||0)===1?"":"s"} in total for ${esc(c.category)} &rsaquo; ${esc(c.subcategory)}</span></div>`
+        +(un.length?`<div class="tiles">${un.map((s,k)=>rTile(kind,it,i,`${i}:L:${s.id}`,"Scene "+(k+1)+(s.run_n?" · written in run "+s.run_n:" · from the library"),s.text,it.sel&&it.sel.lib_id===s.id)).join("")}</div>`
+          :`<div class="hint" style="margin:4px 0 8px">${(it.lib_total||0)?"All scenes for this subcategory are already used.":"No scenes for this subcategory yet."} Press "Write new scenes".</div>`);
+    }else{
+      lib=`<div class="hint" style="margin:4px 0 8px">${it.lib_total||0} saved scene${(it.lib_total||0)===1?"":"s"} in the ${K} library for this subcategory will be analysed before the new ones are written.</div>`;
+    }
+    return `<div class="r1photo">${rHead(it,i,tag+(it.running==="scenes"?'<span class="chip run">writing scenes...</span>':"")+`<button class="ghost" data-act="sc:${i}" ${busy?"disabled":""}>${kind==="r3"?"Write new scenes":"Run again"}</button>`)}
+      ${lib}${runs||(it.running==="scenes"?'<div class="hint"><span class="spin" style="display:inline-block;vertical-align:middle;margin-right:8px;width:16px;height:16px"></span>The text model is analysing the existing scenes and writing new ones...</div>':(kind==="r2"?'<div class="hint">No scenes written yet.</div>':""))}</div>`;
+  }).join("");
+  /* step 3 */
+  const show=j.items.some(it=>it.sel||it.images.length||it.running==="image");
+  r3.classList.toggle("hide",!show);
+  r3.innerHTML=j.items.map((it,i)=>{
+    if(!(it.sel||it.images.length||it.running==="image"))return "";
+    const [w,h]=(j.size||"1088x1360").split("x").map(Number), cur=rSceneText(kind,it);
+    return `<div class="r1photo">${rHead(it,i,`<span class="chip" title="identify + scenes + images of this photo, every run">photo total ${inr(rPhotoTotal(it))}</span>`+(it.running==="image"?'<span class="chip run">making the image...</span>':""))}
+      ${cur?`<details open><summary class="hint" style="cursor:pointer">Final prompt that will be sent now (your prompt, then the chosen scene)</summary><div class="box"><pre data-pc="${i}">${esc((rq(kind,"p3").value.trim()+"\n\n"+cur).trim())}</pre></div></details>`:'<div class="hint">No scene chosen for this photo yet.</div>'}
+      ${it.error&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+      ${it.running==="image"?`<div class="ph" style="aspect-ratio:${w}/${h};width:200px"><div class="spin"></div>Generating...</div>`:""}
+      ${it.images.slice().reverse().map(r=>{const tot=r.id_cost_inr+r.scene_cost_inr+r.cost_inr;
+        return `<div style="display:flex;gap:14px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)"><figure style="width:200px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · total <b>${inr(tot)}</b><br><span class="hint">identify ${inr(r.id_cost_inr)} + scenes ${inr(r.scene_cost_inr)} + image ${inr(r.cost_inr)}</span></figcaption></figure>
+         <div style="flex:1;min-width:260px"><div class="hint" style="margin:0 0 4px">${esc(r.category)} &rsaquo; ${esc(r.subcategory)} · identify: ${esc(r.id_model)} (${esc(r.id_effort)}) · image: ${esc(IMAGE_NAME)} · ${esc(r.size)} · ${esc(r.created)}</div>
+          <b>Final prompt sent to the image model</b> <span class="hint">· ${r.prompt_c.length.toLocaleString("en-IN")} characters</span>
+          <pre style="white-space:pre-wrap;font-size:13px;max-height:340px;overflow:auto;margin:6px 0 0">${esc(r.prompt_c)}</pre></div></div>`}).join("")}
+      </div></div>`;
+  }).join("");
+  rRefresh(kind);
+}
+const IMAGE_NAME="gpt-image-2.5-sunburst · low";
+function rPreview(kind){
+  const S=RS[kind]; if(!S.job)return;
+  $$("#tab-"+kind+" pre[data-pc]").forEach(p=>{p.textContent=(rq(kind,"p3").value.trim()+"\n\n"+rSceneText(kind,S.job.items[+p.dataset.pc])).trim()});
+}
+async function rClick(kind,e){
+  const S=RS[kind]; if(!S.job)return;
+  const x=e.target.closest("[data-xp]");
+  if(x){e.stopPropagation(); const k=x.dataset.xp;
+    if(S.all){S.all=false; S.job.items.forEach((it,i)=>{it.scene_runs.forEach(r=>r.tiles.forEach((_,t)=>S.X.add(`${i}:${r.n}:${t}`))); (it.lib_unused||[]).forEach(s=>S.X.add(`${i}:L:${s.id}`))})}
+    S.X.has(k)?S.X.delete(k):S.X.add(k); rRender(kind); return}
+  if(e.target.matches&&e.target.matches('[data-r="allx"]')){S.all=e.target.checked; if(!S.all)S.X.clear(); rRender(kind); return}
+  const a=e.target.closest("[data-act]");
+  if(a&&!rBusy(kind)){const [act,i,n]=a.dataset.act.split(":");
+    if(act==="id"){await rRun(kind,1,i); return}
+    if(act==="sc"){await rRun(kind,2,i); return}
+    if(act==="use"){try{await api(`/api/rf/${kind}/${encodeURIComponent(S.folder)}/useid`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index:+i,run:+n})}); await rReload(kind)}catch(err){rq(kind,"msg1").textContent=err.message}
+      return}}
+  const t=e.target.closest("[data-pick]"); if(!t||rBusy(kind))return;
+  const [i,a2,b2]=t.dataset.pick.split(":");
+  const body=a2==="L"?{index:+i,lib_id:b2}:{index:+i,run:+a2,tile:+b2};
+  try{
+    await api(`/api/rf/${kind}/${encodeURIComponent(S.folder)}/pick`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    await rReload(kind);
+  }catch(err){rq(kind,"msg2").textContent=err.message}
+}
+async function rLoadLib(kind){
+  const box=rq(kind,"lib"); box.innerHTML='<div class="hint">Loading...</div>';
+  try{
+    const {categories}=await api(`/api/rf/${kind}/library`);
+    box.innerHTML=categories.length?categories.map(c=>`<div style="margin:0 0 10px"><b>${esc(c.name)}</b>`+c.subcategories.map(s=>`<div style="margin:4px 0 4px 12px"><b>${esc(s.name)}</b> <span class="hint">· ${s.scenes.length} scene${s.scenes.length===1?"":"s"}</span>`
+      +s.scenes.map((x,k)=>`<details style="margin:3px 0 3px 12px"><summary class="hint" style="cursor:pointer">${k+1}. ${esc((x.text||"").split("\n")[0].replace(/^CONCEPT:\s*/i,"").slice(0,90))} · <b>${esc(x.status)}</b> · ${esc((x.created||"").replace("T"," "))}${x.photo?" · "+esc(x.photo):""}</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(x.text)}</pre>${x.file?`<figure style="max-width:160px"><img src="/outputs/${encodeURIComponent(x.folder)}/${encodeURIComponent(x.file)}" alt="" loading="lazy"></figure>`:""}</details>`).join("")+`</div>`).join("")+`</div>`).join(""):'<div class="hint">The library is empty. Run step 1 and step 2 to fill it.</div>';
+  }catch(e){box.innerHTML=`<div class="err">${esc(e.message)}</div>`}
+}
+
 /* ================= HISTORY ================= */
 let HIST=[]; const HSEL=new Set();
 function histShow(){
@@ -1243,18 +1533,18 @@ function histShow(){
   $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
   const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`;
   $("#hlist").innerHTML=rows.length?rows.map(r=>{
-    const kind=r.type==="single"?"Single run":r.type==="r1"?"R1":r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const kind=r.type==="single"?"Single run":rIsR(r.type)?r.type.toUpperCase():r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
     const st=r.state;
-    const open=r.type==="single"?"single":r.type==="multi"?"multi":r.type==="r1"?"r1":"batch";
-    const more=r.type==="r1"?(r.selected||[]).map(x=>`<div class="hm"><b>Selected prompt${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+    const open=r.type==="single"?"single":r.type==="multi"?"multi":rIsR(r.type)?r.type:"batch";
+    const more=rIsR(r.type)?((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"")+(r.selected||[]).map(x=>`<div class="hm"><b>Selected ${r.type==="r1"?"prompt":"scene"}${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
       ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
     const sel=r.type==="single"?`<label class="hint" style="display:block;margin-top:4px"><input type="checkbox" data-hsel="${esc(r.folder)}" ${HSEL.has(r.folder)?"checked":""}> select to compare</label>`:"";
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
-       <div class="hm">${esc(r.created)} · ${r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="hm">${esc(r.created)} · ${r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:(r.type==="r2"||r.type==="r3")?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.id_runs} identification${r.id_runs===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
        ${sel}<div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||r.type==="r1")?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||rIsR(r.type))?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -1296,6 +1586,7 @@ $("#hlist").addEventListener("click",async e=>{
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
     else if(kind==="r1"){$('nav button[data-tab="r1"]').click(); r1Open(folder)}
+    else if(kind==="r2"||kind==="r3"){$('nav button[data-tab="'+kind+'"]').click(); rOpen(kind,folder)}
     else if(kind==="multi"){gcache={}; $('nav button[data-tab="new"]').click(); pollGroup(folder); $("#result").scrollIntoView({behavior:"smooth"})}
     else{$('nav button[data-tab="batch"]').click(); showBatch(folder)}
     return}
@@ -1304,14 +1595,30 @@ $("#hlist").addEventListener("click",async e=>{
 });
 
 /* ================= SCENE LIBRARY ================= */
+const LIBHINT={scene:"Every scene the Batch scene flow has written, grouped as category > subcategory. Later runs on the same subcategory are told to be different from these.",
+  r2:"The R2 library, separate from the others: only the scenes you picked in R2 step 2 are saved here (selected = picked, done = an image was made from it, replaced = you picked another one).",
+  r3:"The R3 library, separate from the others: every scene the AI wrote in R3 step 2 is saved here (unused = not used yet, used = an image was made from it)."};
 async function loadLib(){
-  const box=$("#liblist");
+  const box=$("#liblist"), which=$("input[name=libsel]:checked").value;
+  $("#libhint").textContent=LIBHINT[which]; $("#libtot").textContent="";
   try{
-    const {categories}=await api("/api/scene/library");
+    if(which==="scene"){
+      const {categories}=await api("/api/scene/library");
+      const n=categories.reduce((a,c)=>a+c.subcategories.reduce((b,s)=>b+s.scenes.length,0),0);
+      $("#libtot").textContent=`${categories.length} categor${categories.length===1?"y":"ies"} · ${n} scene${n===1?"":"s"}`;
+      box.innerHTML=categories.length?categories.map(c=>`<div class="card"><h2 style="font-size:17px">${esc(c.name)}</h2>`+c.subcategories.map(s=>`<div class="sub" style="color:var(--ink);font-weight:700;margin-top:10px">${esc(s.name)} <span class="chip">${s.scenes.length} scene${s.scenes.length===1?"":"s"}</span></div>`
+        +s.scenes.map((x,i)=>`<div class="box" style="margin:6px 0"><details><summary>${i+1}. ${esc(x.concept||"(no name)")} <span class="hint">· ${esc(x.created.replace("T"," "))} · ${esc(x.status)}</span></summary><div class="hint" style="padding:4px 0">${esc(x.summary)}</div>${x.file?`<figure style="max-width:200px"><img src="/outputs/${encodeURIComponent(x.folder)}/${encodeURIComponent(x.file)}" alt="" loading="lazy"></figure>`:""}<div class="hint">${esc(x.folder)}</div></details></div>`).join("")).join("")+`</div>`).join(""):'<div class="card hint">No scenes yet. Run the scene flow in the Batch tab.</div>';
+      return;
+    }
+    const {categories}=await api(`/api/rf/${which}/library`);
+    const all=categories.flatMap(c=>c.subcategories.flatMap(s=>s.scenes)), st={};
+    all.forEach(x=>st[x.status]=(st[x.status]||0)+1);
+    $("#libtot").textContent=`${categories.length} categor${categories.length===1?"y":"ies"} · ${all.length} scene${all.length===1?"":"s"}`+(all.length?" ("+Object.entries(st).map(([k,v])=>`${v} ${k}`).join(", ")+")":"");
     box.innerHTML=categories.length?categories.map(c=>`<div class="card"><h2 style="font-size:17px">${esc(c.name)}</h2>`+c.subcategories.map(s=>`<div class="sub" style="color:var(--ink);font-weight:700;margin-top:10px">${esc(s.name)} <span class="chip">${s.scenes.length} scene${s.scenes.length===1?"":"s"}</span></div>`
-      +s.scenes.map((x,i)=>`<div class="box" style="margin:6px 0"><details><summary>${i+1}. ${esc(x.concept||"(no name)")} <span class="hint">· ${esc(x.created.replace("T"," "))} · ${esc(x.status)}</span></summary><div class="hint" style="padding:4px 0">${esc(x.summary)}</div>${x.file?`<figure style="max-width:200px"><img src="/outputs/${encodeURIComponent(x.folder)}/${encodeURIComponent(x.file)}" alt="" loading="lazy"></figure>`:""}<div class="hint">${esc(x.folder)}</div></details></div>`).join("")).join("")+`</div>`).join(""):'<div class="card hint">No scenes yet. Run the scene flow in the Batch tab.</div>';
+      +s.scenes.map((x,i)=>`<div class="box" style="margin:6px 0"><details><summary>${i+1}. ${esc((x.text||"").split("\n")[0].replace(/^CONCEPT:\s*/i,"").slice(0,100)||"(no name)")} <span class="hint">· ${esc((x.created||"").replace("T"," "))} · <b>${esc(x.status)}</b>${x.photo?" · "+esc(x.photo):""}</span></summary><pre style="white-space:pre-wrap;font-size:13px">${esc(x.text)}</pre>${x.file?`<figure style="max-width:200px"><img src="/outputs/${encodeURIComponent(x.folder)}/${encodeURIComponent(x.file)}" alt="" loading="lazy"></figure>`:""}<div class="hint">${esc(x.folder||"")}${x.text_model?" · written by "+esc(x.text_model)+" ("+esc(x.effort)+")":""}</div></details></div>`).join("")).join("")+`</div>`).join(""):`<div class="card hint">The ${which.toUpperCase()} library is empty. Run steps 1 and 2 in the ${which.toUpperCase()} tab to fill it.</div>`;
   }catch(e){box.innerHTML=`<div class="card err">${esc(e.message)}</div>`}
 }
+$$("input[name=libsel]").forEach(r=>r.onchange=loadLib); $("#libreload").onclick=loadLib;
 
 sinit().catch(e=>{$("#sfmsg").textContent="Could not load scene options: "+e.message});
 init().catch(e=>{$("#msg").textContent="Could not load: "+e.message});

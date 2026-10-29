@@ -467,3 +467,5 @@ from sceneflow import router as scene_router  # noqa: E402  (batch scene flow + 
 app.include_router(scene_router)
 from r1 import router as r1_router  # noqa: E402  (R1 tab: prompt A -> several prompts -> pick one -> image)
 app.include_router(r1_router)
+from rflow import router as rflow_router  # noqa: E402  (R2 and R3 tabs: identify -> scenes -> image)
+app.include_router(rflow_router)

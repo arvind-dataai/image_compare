@@ -1,0 +1,25 @@
+{
+ "categories": {
+  "Jewellery": {
+   "subcategories": {
+    "Necklace Sets": {
+     "scenes": [
+      {
+       "status": "done",
+       "text": "CONCEPT: Minimalist travertine vanity\nSETTING: Sunlit modern dressing room, morning.\nSURFACE AND BACKGROUND: Honed beige travertine stone tabletop, smooth matte off-white plaster wall.\nPRODUCT PRESENTATION: The necklace set rests flat on an inclined cream linen display pad positioned atop the stone.\nCOMPOSITION: Positioned along the lower-right third, leaving the upper-left open and clear.\nCAMERA: 45-degree elevated angle, close focal distance.\nLIGHTING: Raking natural morning sunlight from the left, soft diffused fills, clean contact shadows beneath jewelry edges.\nCOLOUR PALETTE: Warm beige, matte cream, soft sand. The lustrous metal and bright green accents detach cleanly from the pale stone.\nPROPS: Small frosted glass perfume bottle blurred in background.\nMOOD AND STYLE: Airy, architectural, understated luxury editorial.",
+       "photo": "j2.jpeg",
+       "folder": "r2_1_r2",
+       "text_model": "gemini-3.8-flash",
+       "effort": "medium",
+       "run_n": 1,
+       "id": "908ce47c",
+       "created": "2026-10-29T16:02:39",
+       "file": "out_001_j2_1.png",
+       "photo_key": "r2_1_r2/in_001_j2.jpg"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

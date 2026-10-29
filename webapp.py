@@ -547,7 +547,9 @@ def history():
             "failed": sum(1 for e in ents if e["state"] == "error"),
             "cost_inr": round(cost, 4), "models": [], "categories": []})
     import r1
+    import rflow
     rows.extend(r1.r1_list())
+    rows.extend(rflow.list_rows())
     for b in batch.batch_list()["batches"]:
         rows.append({
             "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],
