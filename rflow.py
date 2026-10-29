@@ -10,7 +10,8 @@
   POST /api/rf/{kind}/{folder}/pick       choose the scene (tile) that goes to step 3
   POST /api/rf/{kind}/{folder}/image      step 3: your prompt + the chosen scene -> gpt-image-2.5-sunburst, low
 
-kind = "r2" or "r3". Each has its OWN scene library file (r2_library.json / r3_library.json).
+kind = "r2", "r3" or "r4". Each has its OWN scene library file (r2_library.json / r3_library.json / r4_library.json).
+R4 = R2 with no prompt in step 3 and a choice of image model (flare or sunburst) and quality (low or medium).
 
   R2: the scenes the AI writes are shown as tiles and nothing is saved until you pick one: the PICKED scene is saved in the library.
   R3: every scene the AI writes is saved in the library at once (status "unused"). Step 2 shows the unused scenes of the photo's
@@ -43,8 +44,12 @@ DEFAULT_ID = (HERE / "scene_classify_prompt.txt").read_text(encoding="utf-8")
 DEFAULT_SCENE = (HERE / "r_scene_prompt.txt").read_text(encoding="utf-8")
 DEFAULT_B = (HERE / "r1_prompt_b.txt").read_text(encoding="utf-8")
 IMAGE_MODEL, QUALITY = batch.BATCH_MODEL, batch.BATCH_QUALITY
-KINDS = ("r2", "r3")
-_FOLDER = re.compile(r"^(r2|r3)_\d+_[A-Za-z0-9_.+\-]+$")
+KINDS = ("r2", "r3", "r4")
+R2LIKE = ("r2", "r4")                 # R4 behaves exactly like R2 (own library), except for step 3
+# R4 step 3: no prompt box; the image model and quality are chosen in the page
+R4_CHOICES = {"flare-low": ("gpt-image-2.5-flare", "low"), "flare-medium": ("gpt-image-2.5-flare", "medium"),
+              "sunburst-low": ("gpt-image-2.5-sunburst", "low"), "sunburst-medium": ("gpt-image-2.5-sunburst", "medium")}
+_FOLDER = re.compile(r"^(r2|r3|r4)_\d+_[A-Za-z0-9_.+\-]+$")
 LOCK = threading.RLock()
 POOL = ThreadPoolExecutor(max_workers=int(__import__("os").getenv("WEB_BATCH_WORKERS", "3")))
 JOBS: dict = {}
@@ -196,8 +201,12 @@ def _get(kind: str, folder: str) -> dict:
         except Exception:
             raise HTTPException(404, "Run not found.")
         for it in job["items"]:
+            if "sel" in it:                                             # older runs kept one chosen scene: now it is a list
+                old = it.pop("sel")
+                it["sels"] = [old] if old else []
+            it.setdefault("sels", [])
             if it.get("running"):
-                it["running"], it["error"] = "", "Stopped: the server restarted before this finished."
+                it["running"], it["error"], it["pending"] = "", "Stopped: the server restarted before this finished.", 0
         JOBS[folder] = job
         return job
 
@@ -313,7 +322,7 @@ def _do_identify(job: dict, i: int, cfg: dict):
             it["id_runs"].append(run)
         if not err:
             it["id_cur"] = run["n"]
-            it["sel"] = None                                           # a new identification clears the chosen scene (history is kept)
+            it["sels"] = []                                            # a new identification clears the chosen scenes (history is kept)
     _end(job, i, err)
 
 
@@ -352,7 +361,7 @@ def _parse_scenes(text: str) -> list:
 
 def _context_scenes(kind: str, cat: str, sub: str) -> list:
     sc = LIBS[kind].scenes(cat, sub)
-    if kind == "r2":
+    if kind in R2LIKE:
         sc = [s for s in sc if s.get("status") in ("selected", "done")]
     else:
         sc = [s for s in sc if s.get("status") in ("unused", "used")]
@@ -409,54 +418,81 @@ def _scenes_body(job: dict, i: int, cfg: dict, cur: dict):
 
 
 # ---------------------------------------------------------------- step 3: image
-def _scene_of(kind: str, it: dict):
-    """(scene text, library id, scene run or None, cost of the run that wrote it for THIS photo) of the chosen scene."""
-    sel = it.get("sel") or {}
-    if kind == "r2":
+def _scene_of(kind: str, it: dict, sel: dict):
+    """(scene text, library id, scene run or None, cost of the run that wrote it for THIS photo) of one chosen scene."""
+    if kind in R2LIKE:
         run = next((r for r in it["scene_runs"] if r["n"] == sel.get("run")), None)
         if not run or not 0 <= sel.get("tile", -1) < len(run["tiles"]):
-            raise RuntimeError("Choose one of the scenes (tiles) for this photo first.")
+            raise RuntimeError("A chosen scene no longer exists.")
         return run["tiles"][sel["tile"]], sel.get("lib_id"), run["n"], run["cost_inr"]
     s = LIBS[kind].get(sel.get("lib_id", ""))
     if not s:
-        raise RuntimeError("Choose one of the scenes (tiles) for this photo first.")
+        raise RuntimeError("A chosen scene no longer exists.")
     run = next((r for r in it["scene_runs"] if s["id"] in r.get("lib_ids", [])), None)
     return s["text"], s["id"], (run["n"] if run else None), (run["cost_inr"] if run else 0.0)
 
 
-def _do_image(job: dict, i: int, prompt_b: str, size: str):
+def _task_done(job: dict, i: int, err: str):
+    """One image task of a photo finished; the photo is free again when its last task is done."""
+    with LOCK:
+        it = job["items"][i]
+        if err:
+            it.setdefault("errs", []).append(err)
+        it["pending"] = it.get("pending", 1) - 1
+        last = it["pending"] <= 0
+        errs = " | ".join(it.pop("errs", [])) if last else ""
+    if last:
+        _end(job, i, errs)
+
+
+def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, prompt_b: str, size: str, model: str = "", quality: str = ""):
     kind, it, folder = job["kind"], job["items"][i], job["folder"]
+    model, quality = model or IMAGE_MODEL, quality or QUALITY
     lib = LIBS[kind]
-    err = ""
+    err, label = "", "A chosen scene"
     try:
         cur = _cur_id(it)
         if not cur:
             raise RuntimeError("Run step 1 for this photo first.")
-        text, lib_id, run_n, scene_cost = _scene_of(kind, it)
+        text, lib_id, run_n, scene_cost = _scene_of(kind, it, sel)
+        label = f"Scene {sub}"
         if kind == "r3":
             s = lib.get(lib_id)
             key = f"{folder}/{it['input']}"
             if s.get("status") == "used" and s.get("photo_key") != key:
                 raise RuntimeError("That scene was already used for another photo. Choose another scene.")
         prompt_c = (prompt_b.strip() + "\n\n" + text).strip()
-        png, usage = core._generate(_image_of(folder, it), prompt_c, size, IMAGE_MODEL, QUALITY)
-        n = len(it["images"]) + 1
+        with LOCK:
+            n = max(it.get("img_seq", 0), len(it["images"])) + 1
+            it["img_seq"] = n
+        png, usage = core._generate(_image_of(folder, it), prompt_c, size, model, quality)
         fname = f"out_{i + 1:03d}_{batch._safe_name(it['orig_name'])}_{n}.png"
-        cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, IMAGE_MODEL, QUALITY, f"{kind} image | {folder}")
+        cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, model, quality, f"{kind} image | {folder}")
         id_cost = cur["cost_inr"]
         with LOCK:
-            it["images"].append({"n": n, "created": _now(), "category": cur["category"], "subcategory": cur["subcategory"],
-                                 "id_run": cur["n"], "id_model": cur["text_model"], "id_effort": cur["effort"], "id_cost_inr": id_cost,
-                                 "scene_run": run_n, "scene_cost_inr": scene_cost, "lib_id": lib_id, "scene_text": text,
-                                 "prompt_b": prompt_b, "prompt_c": prompt_c, "size": size, "file": fname, "cost_inr": round(cost, 4)})
+            it["images"].append({"n": n, "gen": gen, "sub": sub, "subs": subs, "created": _now(), "category": cur["category"],
+                                 "subcategory": cur["subcategory"], "id_run": cur["n"], "id_model": cur["text_model"],
+                                 "id_effort": cur["effort"], "id_cost_inr": id_cost, "scene_run": run_n, "scene_cost_inr": scene_cost,
+                                 "image_model": model, "quality": quality, "lib_id": lib_id, "scene_text": text, "prompt_b": prompt_b, "prompt_c": prompt_c, "size": size,
+                                 "file": fname, "cost_inr": round(cost, 4)})
             job["total_inr"] = round(job.get("total_inr", 0) + cost, 4)
             job["size"], job["prompt_b"] = size, prompt_b
+            job["image_model"], job["quality"] = model, quality
         if lib_id:
             lib.update(lib_id, status="used" if kind == "r3" else "done", file=fname, folder=folder, photo=it["orig_name"],
                        photo_key=f"{folder}/{it['input']}")
     except Exception as e:
-        err = str(getattr(e, "detail", None) or e)
-    _end(job, i, err)
+        err = f"{label}: " + str(getattr(e, "detail", None) or e)
+    _task_done(job, i, err)
+
+
+def _run_images(job: dict, tasks: list, prompt_b: str, size: str, model: str = "", quality: str = ""):
+    try:
+        list(POOL.map(lambda t: _do_image(job, t[0], t[1], t[2], t[3], t[4], prompt_b, size, model, quality), tasks))
+    except Exception as e:
+        for i in {t[0] for t in tasks}:
+            if job["items"][i].get("running"):
+                _end(job, i, str(e))
 
 
 # ---------------------------------------------------------------- view
@@ -482,9 +518,11 @@ def _view(job: dict) -> dict:
                 it["lib_mine"] = [s["id"] for s in sc if s.get("status") == "used" and s.get("photo_key") == key]
             else:
                 it["lib_total"] = len([s for s in sc if s.get("status") in ("selected", "done")])
-        if kind == "r3" and it.get("sel") and it["sel"].get("lib_id"):
-            s = lib.get(it["sel"]["lib_id"])
-            it["sel_text"] = s["text"] if s else ""
+        if kind == "r3":
+            it["sel_texts"] = {}
+            for sel in it.get("sels", []):
+                s = lib.get(sel.get("lib_id", ""))
+                it["sel_texts"][sel.get("lib_id", "")] = s["text"] if s else ""
     return out
 
 
@@ -503,6 +541,7 @@ def rf_options(kind: str):
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
         "prompt_id": DEFAULT_ID, "prompt_scene": DEFAULT_SCENE, "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
         "image_model": IMAGE_MODEL, "quality": QUALITY, "est_image_inr_1024": round(estimate_inr(QUALITY, IMAGE_MODEL), 4),
+        "image_choices": [{"id": k, "model": m, "quality": q, "label": f"{m} · {q}", "est_inr_1024": round(estimate_inr(q, m), 4)} for k, (m, q) in R4_CHOICES.items()] if kind == "r4" else [],
     }
 
 
@@ -525,7 +564,7 @@ async def rf_create(kind: str, images: list[UploadFile] = File(...), name: str =
         ext = ".png" if img[2] == "image/png" else ".webp" if img[2] == "image/webp" else ".jpg"
         fname = f"in_{n:03d}_{batch._safe_name(img[0])}{ext}"
         (d / fname).write_bytes(img[1])
-        items.append({"input": fname, "orig_name": img[0], "id_runs": [], "id_cur": None, "scene_runs": [], "sel": None,
+        items.append({"input": fname, "orig_name": img[0], "id_runs": [], "id_cur": None, "scene_runs": [], "sels": [],
                       "images": [], "running": "", "error": ""})
     job = {"folder": d.name, "kind": kind, "name": name.strip() or kind.upper(), "created": _now(), "size": "1088x1360",
            "prompt_id": "", "prompt_scene": "", "prompt_b": "", "total_inr": 0, "items": items}
@@ -578,7 +617,7 @@ def rf_useid(kind: str, folder: str, body: UseId):
         raise HTTPException(400, "Unknown result.")
     with LOCK:
         if it.get("id_cur") != body.run:
-            it["id_cur"], it["sel"] = body.run, None
+            it["id_cur"], it["sels"] = body.run, []
         _save(job)
     return {"ok": True}
 
@@ -604,20 +643,38 @@ class Pick(BaseModel):
     run: int | None = None
     tile: int | None = None
     lib_id: str | None = None
+    clear: bool = False
+
+
+def _drop_sel(job: dict, it: dict, sel: dict, lib: "Lib"):
+    """R2: a scene that was picked but never used for an image no longer counts as saved when it is un-picked."""
+    if sel.get("lib_id"):
+        prev = lib.get(sel["lib_id"])
+        if prev and prev.get("status") == "selected":
+            lib.update(sel["lib_id"], status="replaced")
 
 
 @router.post("/api/rf/{kind}/{folder}/pick")
 def rf_pick(kind: str, folder: str, body: Pick):
+    """Click a tile: choose it, click again: un-choose it. Any number of scenes per photo can be chosen. clear=true drops all."""
     kind = _kind(kind)
     job = _get(kind, folder)
     if not 0 <= body.index < len(job["items"]):
         raise HTTPException(400, "Unknown photo.")
     it, lib = job["items"][body.index], LIBS[kind]
+    if it.get("running"):
+        raise HTTPException(409, "This photo is still working.")
+    if body.clear:
+        with LOCK:
+            if kind in R2LIKE:
+                for sel in it["sels"]:
+                    _drop_sel(job, it, sel, lib)
+            it["sels"] = []
+            _save(job)
+        return {"ok": True}
     cur = _cur_id(it)
     if not cur:
         raise HTTPException(400, "Run step 1 for this photo first.")
-    if it.get("running"):
-        raise HTTPException(409, "This photo is still working.")
     if kind == "r3":
         s = lib.get(body.lib_id or "")
         if not s:
@@ -626,40 +683,54 @@ def rf_pick(kind: str, folder: str, body: Pick):
         if s.get("status") == "used" and s.get("photo_key") != key:
             raise HTTPException(400, "That scene was already used for another photo.")
         with LOCK:
-            it["sel"] = {"lib_id": s["id"]}
+            rest = [x for x in it["sels"] if x.get("lib_id") != s["id"]]
+            if len(rest) == len(it["sels"]):
+                rest.append({"lib_id": s["id"]})
+            it["sels"] = rest
             _save(job)
         return {"ok": True}
     run = next((r for r in it["scene_runs"] if r["n"] == body.run), None)
     if not run or body.tile is None or not 0 <= body.tile < len(run["tiles"]):
         raise HTTPException(400, "Unknown scene.")
-    old = it.get("sel") or {}
-    if old.get("run") == body.run and old.get("tile") == body.tile:
-        return {"ok": True}
     with LOCK:
-        if old.get("lib_id"):
-            prev = lib.get(old["lib_id"])
-            if prev and prev.get("status") == "selected":              # picked before but no image yet: it no longer counts
-                lib.update(old["lib_id"], status="replaced")
-        text = run["tiles"][body.tile]
-        lid = lib.add(run["category"], run["subcategory"], {"status": "selected", "text": text, "photo": it["orig_name"], "folder": folder,
-                                                          "text_model": run["text_model"], "effort": run["effort"], "run_n": run["n"]})
-        it["sel"] = {"run": body.run, "tile": body.tile, "lib_id": lid}
+        hit = next((x for x in it["sels"] if x.get("run") == body.run and x.get("tile") == body.tile), None)
+        if hit:                                                        # un-choose
+            _drop_sel(job, it, hit, lib)
+            it["sels"] = [x for x in it["sels"] if x is not hit]
+        else:
+            lid = lib.add(run["category"], run["subcategory"], {"status": "selected", "text": run["tiles"][body.tile], "photo": it["orig_name"],
+                                                              "folder": folder, "text_model": run["text_model"], "effort": run["effort"], "run_n": run["n"]})
+            it["sels"].append({"run": body.run, "tile": body.tile, "lib_id": lid})
         _save(job)
     return {"ok": True}
 
 
 @router.post("/api/rf/{kind}/{folder}/image")
-def rf_image(kind: str, folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"), indexes: str = Form("")):
+def rf_image(kind: str, folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"), indexes: str = Form(""), image_choice: str = Form("")):
     job = _get(_kind(kind), folder)
+    model, quality = IMAGE_MODEL, QUALITY
+    if kind == "r4":
+        prompt_b = ""                                     # R4 has no prompt box: the final prompt is the chosen scene alone
+        if image_choice not in R4_CHOICES:
+            raise HTTPException(400, "Choose the image model and quality.")
+        model, quality = R4_CHOICES[image_choice]
     if len(prompt_b) > 30000:
         raise HTTPException(400, "The prompt is too long (limit 30,000 characters).")
     core._check_size(size)
-    todo = [i for i in _targets(job, indexes) if job["items"][i].get("sel")]
+    todo = [i for i in _targets(job, indexes) if job["items"][i].get("sels")]
     if not todo:
         raise HTTPException(400, "Choose a scene (tile) for at least one photo first.")
     _begin(job, todo, "image")
-    threading.Thread(target=_run_pool, args=(_do_image, job, todo, (prompt_b.strip(), size)), daemon=True).start()
-    return {"started": len(todo)}
+    tasks = []
+    with LOCK:
+        for i in todo:
+            it = job["items"][i]
+            gen = max([r.get("gen", 0) for r in it["images"]] + [it.get("gen", 0)]) + 1
+            it["gen"], sels = gen, list(it["sels"])
+            it["pending"] = len(sels)
+            tasks += [(i, sel, gen, k, len(sels)) for k, sel in enumerate(sels, start=1)]
+    threading.Thread(target=_run_images, args=(job, tasks, prompt_b.strip(), size, model, quality), daemon=True).start()
+    return {"started": len(tasks)}
 
 
 # ---------------------------------------------------------------- History
@@ -680,7 +751,7 @@ def list_rows() -> list:
             ts = p.stat().st_mtime
         thumb = next((f"/outputs/{p.name}/{it['images'][-1]['file']}" for it in items if it["images"]), "") or (f"/outputs/{p.name}/{items[0]['input']}" if items else "")
         cats = list(dict.fromkeys(f"{r['category']} > {r['subcategory']}" for it in items for r in it["id_runs"] if not r.get("error") and r.get("category")))
-        models = [f"{r['text_model']} ({r['effort']})" for it in items for r in it["id_runs"] + it["scene_runs"]] + [IMAGE_MODEL]
+        models = [f"{r['text_model']} ({r['effort']})" for it in items for r in it["id_runs"] + it["scene_runs"]] + list(dict.fromkeys(f"{r.get('image_model', IMAGE_MODEL)} {r.get('quality', QUALITY)}" for it in items for r in it["images"])) * (job["kind"] == "r4") + [IMAGE_MODEL] * (job["kind"] != "r4")
         rows.append({
             "type": job["kind"], "flow": job["kind"], "folder": p.name, "created": job["created"], "ts": ts,
             "title": job.get("name") or job["kind"].upper(), "state": "running" if any(it.get("running") for it in items) else "done",
@@ -688,6 +759,7 @@ def list_rows() -> list:
             "scene_runs": sum(len(it["scene_runs"]) for it in items), "images_done": len(imgs), "images_total": len(imgs),
             "failed": sum(1 for it in items if it.get("error")), "cost_inr": round(job.get("total_inr", 0), 4),
             "models": list(dict.fromkeys(models)), "categories": cats,
-            "selected": [{"photo": it["orig_name"], "text": it["images"][-1]["scene_text"]} for it in items if it["images"]],
+            "selected": [{"photo": it["orig_name"], "text": t} for it in items
+                         for t in list(dict.fromkeys(r["scene_text"] for r in it["images"]))][:8],
         })
     return rows

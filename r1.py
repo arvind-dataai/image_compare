@@ -81,8 +81,12 @@ def _get(folder: str) -> dict:
         except Exception:
             raise HTTPException(404, "R1 run not found.")
         for it in job["items"]:
+            if "sel" in it:                                             # older runs kept one chosen prompt: now it is a list
+                old = it.pop("sel")
+                it["sels"] = [old] if old else []
+            it.setdefault("sels", [])
             if it.get("running"):                                       # the server restarted while it was working
-                it["running"], it["error"] = "", "Stopped: the server restarted before this finished."
+                it["running"], it["error"], it["pending"] = "", "Stopped: the server restarted before this finished.", 0
         JOBS[folder] = job
         return job
 
@@ -218,36 +222,50 @@ def _run_prompts(job: dict, todo: list, cfg: dict):
 
 
 # ---------------------------------------------------------------- step 2: image
-def _do_image(job: dict, i: int, prompt_b: str, size: str):
+def _task_done(job: dict, i: int, err: str):
+    """One image task of a photo finished; the photo is free again when its last task is done."""
+    with LOCK:
+        it = job["items"][i]
+        if err:
+            it.setdefault("errs", []).append(err)
+        it["pending"] = it.get("pending", 1) - 1
+        last = it["pending"] <= 0
+        errs = " | ".join(it.pop("errs", [])) if last else ""
+    if last:
+        _end(job, i, errs)
+
+
+def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, prompt_b: str, size: str):
     it, folder = job["items"][i], job["folder"]
     err = ""
     try:
-        sel = it.get("sel") or {}
         run = next((r for r in it["runs"] if r["n"] == sel.get("run")), None)
         if not run or not (0 <= sel.get("tile", -1) < len(run["tiles"])):
-            raise RuntimeError("Choose one of the prompts (tiles) for this photo first.")
+            raise RuntimeError("A chosen prompt no longer exists.")
         tile = run["tiles"][sel["tile"]]
         prompt_c = (prompt_b.strip() + "\n\n" + tile).strip()
+        with LOCK:
+            n = max(it.get("img_seq", 0), len(it["images"])) + 1
+            it["img_seq"] = n
         png, usage = core._generate(_image_of(folder, it), prompt_c, size, IMAGE_MODEL, QUALITY)
-        n = len(it["images"]) + 1
         fname = f"out_{i + 1:03d}_{batch._safe_name(it['orig_name'])}_{n}.png"
         cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, IMAGE_MODEL, QUALITY, f"r1 image | {folder}")
         with LOCK:
-            it["images"].append({"n": n, "created": _now(), "run_n": run["n"], "tile_idx": sel["tile"], "text_model": run["text_model"],
-                                 "effort": run["effort"], "prompt_a_output": tile, "prompt_b": prompt_b, "prompt_c": prompt_c,
-                                 "size": size, "file": fname, "cost_inr": round(cost, 4)})
+            it["images"].append({"n": n, "gen": gen, "sub": sub, "subs": subs, "created": _now(), "run_n": run["n"], "tile_idx": sel["tile"],
+                                 "text_model": run["text_model"], "effort": run["effort"], "prompt_a_output": tile, "prompt_b": prompt_b,
+                                 "prompt_c": prompt_c, "size": size, "file": fname, "cost_inr": round(cost, 4)})
             job["total_inr"] = round(job.get("total_inr", 0) + cost, 4)
             job["size"], job["prompt_b"] = size, prompt_b
     except Exception as e:
-        err = str(getattr(e, "detail", None) or e)
-    _end(job, i, err)
+        err = f"Prompt {sel.get('tile', 0) + 1} of run {sel.get('run')}: " + str(getattr(e, "detail", None) or e)
+    _task_done(job, i, err)
 
 
-def _run_images(job: dict, todo: list, prompt_b: str, size: str):
+def _run_images(job: dict, tasks: list, prompt_b: str, size: str):
     try:
-        list(POOL.map(lambda i: _do_image(job, i, prompt_b, size), todo))
+        list(POOL.map(lambda t: _do_image(job, t[0], t[1], t[2], t[3], t[4], prompt_b, size), tasks))
     except Exception as e:
-        for i in todo:
+        for i in {t[0] for t in tasks}:
             if job["items"][i].get("running"):
                 _end(job, i, str(e))
 
@@ -281,7 +299,7 @@ async def r1_create(images: list[UploadFile] = File(...), name: str = Form("")):
         ext = ".png" if img[2] == "image/png" else ".webp" if img[2] == "image/webp" else ".jpg"
         fname = f"in_{n:03d}_{batch._safe_name(img[0])}{ext}"
         (d / fname).write_bytes(img[1])
-        items.append({"input": fname, "orig_name": img[0], "runs": [], "sel": None, "images": [], "running": "", "error": ""})
+        items.append({"input": fname, "orig_name": img[0], "runs": [], "sels": [], "images": [], "running": "", "error": ""})
     job = {"folder": d.name, "flow": "r1", "name": name.strip() or "R1", "created": _now(), "size": "1088x1360",
            "prompt_a": "", "prompt_b": "", "total_inr": 0, "items": items}
     with LOCK:
@@ -316,21 +334,31 @@ def r1_prompts(folder: str, prompt_a: str = Form(...), text_model: str = Form(..
 
 class Pick(BaseModel):
     index: int
-    run: int
-    tile: int
+    run: int | None = None
+    tile: int | None = None
+    clear: bool = False
 
 
 @router.post("/api/r1/{folder}/pick")
 def r1_pick(folder: str, body: Pick):
+    """Click a tile: choose it, click again: un-choose it. Any number of tiles per photo can be chosen. clear=true drops all."""
     job = _get(folder)
     if not 0 <= body.index < len(job["items"]):
         raise HTTPException(400, "Unknown photo.")
     it = job["items"][body.index]
+    if body.clear:
+        with LOCK:
+            it["sels"] = []
+            _save(job)
+        return {"ok": True}
     run = next((r for r in it["runs"] if r["n"] == body.run), None)
-    if not run or not 0 <= body.tile < len(run["tiles"]):
+    if not run or body.tile is None or not 0 <= body.tile < len(run["tiles"]):
         raise HTTPException(400, "Unknown prompt.")
     with LOCK:
-        it["sel"] = {"run": body.run, "tile": body.tile}
+        cur = [s for s in it["sels"] if not (s["run"] == body.run and s["tile"] == body.tile)]
+        if len(cur) == len(it["sels"]):
+            cur.append({"run": body.run, "tile": body.tile})
+        it["sels"] = cur
         _save(job)
     return {"ok": True}
 
@@ -342,12 +370,20 @@ def r1_image(folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"
         raise HTTPException(400, "Prompt B is too long (limit 20,000 characters).")
     core._check_size(size)
     todo = _targets(job, indexes)
-    todo = [i for i in todo if job["items"][i].get("sel")]
+    todo = [i for i in todo if job["items"][i].get("sels")]
     if not todo:
         raise HTTPException(400, "Choose a prompt (tile) for at least one photo first.")
     _begin(job, todo, "image")
-    threading.Thread(target=_run_images, args=(job, todo, prompt_b.strip(), size), daemon=True).start()
-    return {"started": len(todo)}
+    tasks = []
+    with LOCK:
+        for i in todo:
+            it = job["items"][i]
+            gen = max([r.get("gen", 0) for r in it["images"]] + [it.get("gen", 0)]) + 1
+            it["gen"], sels = gen, list(it["sels"])
+            it["pending"] = len(sels)
+            tasks += [(i, sel, gen, k, len(sels)) for k, sel in enumerate(sels, start=1)]
+    threading.Thread(target=_run_images, args=(job, tasks, prompt_b.strip(), size), daemon=True).start()
+    return {"started": len(tasks)}
 
 
 # ---------------------------------------------------------------- History
@@ -377,6 +413,7 @@ def r1_list() -> list:
             "cost_inr": round(job.get("total_inr", 0), 4),
             "models": list(dict.fromkeys([f"{r['text_model']} ({r['effort']})" for it in items for r in it["runs"]] + [IMAGE_MODEL])),
             "categories": [],
-            "selected": [{"photo": it["orig_name"], "text": it["images"][-1]["prompt_a_output"]} for it in items if it["images"]],
+            "selected": [{"photo": it["orig_name"], "text": t} for it in items
+                         for t in list(dict.fromkeys(r["prompt_a_output"] for r in it["images"]))][:8],
         })
     return rows
