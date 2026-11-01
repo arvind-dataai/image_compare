@@ -5,6 +5,10 @@ Count how many separate items are in the reference. Items that touch, overlap, s
 Remove the product from the current background and current packaging don’t confuse the background as part of the product. Do not copy the reference's arrangement or background. Remove completely: plastic cards, price tags, QR codes, stickers, threads, plastic wrap, hands, fingers, mannequin, hanger and the original background.
 Keep everything that is part of the product itself, such as its own tassels, cords or printed retail pack.
 
-The current  reference product is photographed badly . It is tilted, crooked, asymmetrical, twisted, tangled, folded unevenly, shifted to one side, dis-balanced or heaped incorrectly. You must re-create the same product in its perfect intended professional form: perfectly centered, symmetrical, even, balanced, untwisted, smooth, neat, with natural gravity and drape as it should be used or worn in real life. Same design, but perfect arrangement like a premium brand catalog for this product category.Do not make it shinier, newer, different color, or add extra details. Fix only glare and blur. For fabric products, smooth harsh messy wrinkles but keep natural drape.
+Product box and image on box are different things, don’t ignore the box in image , if box is shown then that has to be also shown along with the product. Never blur the branded product box or its any content, show it neatly.
+don't confuse the normal packaging and branded box. if normal packaging it has to be removed.
+
+The current  reference product is photographed badly . It is tilted, crooked, asymmetrical, twisted, tangled, folded unevenly, shifted to one side, dis-balanced or heaped incorrectly. You must re-create the same product in its perfect intended professional form: perfectly centered, symmetrical, even, balanced, untwisted, smooth, neat, with natural gravity and drape as it should be used or worn in real life. Same design, but perfect arrangement like a premium brand catalog for this product category. Do not make it shinier, newer, different color, or add extra details.  Clear dirt and dust if any. Fix only glare and blur. For fabric products, smooth harsh messy wrinkles but keep natural drape.
 on a matching name plate
- Don't make any additional claim or extra text.
+ Don't make any additional claim or extra text. Don't change the shape or design of the product.
+Never increase the total count of products compared to the original image.
