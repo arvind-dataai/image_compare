@@ -23,6 +23,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import batch
+import imgchoices
 import main as core
 import scene_library as lib
 from costing import estimate_inr, log_text_cost, text_rate
@@ -236,9 +237,10 @@ def _task_done(job: dict, i: int, err: str):
         _end(job, i, errs)
 
 
-def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, prompt_b: str, size: str):
+def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, prompt_b: str, size: str, model: str = "", quality: str = ""):
     it, folder = job["items"][i], job["folder"]
     err = ""
+    model, quality = model or IMAGE_MODEL, quality or QUALITY
     try:
         run = next((r for r in it["runs"] if r["n"] == sel.get("run")), None)
         if not run or not (0 <= sel.get("tile", -1) < len(run["tiles"])):
@@ -248,13 +250,13 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
         with LOCK:
             n = max(it.get("img_seq", 0), len(it["images"])) + 1
             it["img_seq"] = n
-        png, usage = core._generate(_image_of(folder, it), prompt_c, size, IMAGE_MODEL, QUALITY)
+        png, usage = core._generate(_image_of(folder, it), prompt_c, size, model, quality)
         fname = f"out_{i + 1:03d}_{batch._safe_name(it['orig_name'])}_{n}.png"
-        cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, IMAGE_MODEL, QUALITY, f"r1 image | {folder}")
+        cost = core._store(core.OUTPUT_DIR / folder, fname, png, usage, size, model, quality, f"r1 image | {folder}")
         with LOCK:
             it["images"].append({"n": n, "gen": gen, "sub": sub, "subs": subs, "created": _now(), "run_n": run["n"], "tile_idx": sel["tile"],
                                  "text_model": run["text_model"], "effort": run["effort"], "prompt_a_output": tile, "prompt_b": prompt_b,
-                                 "prompt_c": prompt_c, "size": size, "file": fname, "cost_inr": round(cost, 4)})
+                                 "prompt_c": prompt_c, "size": size, "image_model": model, "quality": quality, "file": fname, "cost_inr": round(cost, 4)})
             job["total_inr"] = round(job.get("total_inr", 0) + cost, 4)
             job["size"], job["prompt_b"] = size, prompt_b
     except Exception as e:
@@ -262,9 +264,9 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
     _task_done(job, i, err)
 
 
-def _run_images(job: dict, tasks: list, prompt_b: str, size: str):
+def _run_images(job: dict, tasks: list, prompt_b: str, size: str, model: str = "", quality: str = ""):
     try:
-        list(POOL.map(lambda t: _do_image(job, t[0], t[1], t[2], t[3], t[4], prompt_b, size), tasks))
+        list(POOL.map(lambda t: _do_image(job, t[0], t[1], t[2], t[3], t[4], prompt_b, size, model, quality), tasks))
     except Exception as e:
         for i in {t[0] for t in tasks}:
             if job["items"][i].get("running"):
@@ -282,7 +284,7 @@ def r1_options():
                          "rate_in": text_rate(k)[0], "rate_out": text_rate(k)[1]} for k, v in tm.items()],
         "efforts": EFFORTS, "est_in": EST_IN, "est_out": EST_OUT, "usd_to_inr": core.USD_TO_INR,
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
-        "prompt_a": DEFAULT_A, "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
+        "prompt_a": DEFAULT_A, "image_choices": imgchoices.for_page(), "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
         "image_model": IMAGE_MODEL, "quality": QUALITY, "est_image_inr_1024": round(estimate_inr(QUALITY, IMAGE_MODEL), 4),
     }
 
@@ -363,8 +365,9 @@ def r1_pick(folder: str, body: Pick):
 
 
 @router.post("/api/r1/{folder}/image")
-def r1_image(folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"), indexes: str = Form("")):
+def r1_image(folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"), indexes: str = Form(""), image_choice: str = Form("")):
     job = _get(folder)
+    model, quality = imgchoices.pick(image_choice)
     if len(prompt_b) > 20000:
         raise HTTPException(400, "Prompt B is too long (limit 20,000 characters).")
     core._check_size(size)
@@ -381,7 +384,7 @@ def r1_image(folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"
             it["gen"], sels = gen, list(it["sels"])
             it["pending"] = len(sels)
             tasks += [(i, sel, gen, k, len(sels)) for k, sel in enumerate(sels, start=1)]
-    threading.Thread(target=_run_images, args=(job, tasks, prompt_b.strip(), size), daemon=True).start()
+    threading.Thread(target=_run_images, args=(job, tasks, prompt_b.strip(), size, model, quality), daemon=True).start()
     return {"started": len(tasks)}
 
 

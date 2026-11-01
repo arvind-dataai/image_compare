@@ -20,6 +20,27 @@
      ]
     }
    }
+  },
+  "Clothing": {
+   "subcategories": {
+    "Clothing Sets": {
+     "scenes": [
+      {
+       "status": "done",
+       "text": "Create a high-end, photorealistic coastal-holiday campaign image featuring the exact children’s outfit from the reference: grey printed top, open blue-grey denim-look jacket/vest, matching trousers with turned-up cuffs, and black-and-white lace-up shoes. Preserve the original colors, silhouette, layering, and small garment prints and lettering.\nSet the display in a practical, upscale seaside-home mudroom with whitewashed oak, luminous chalk-white plaster, a band of deep sea-glass-blue ceramic tile, and a broad window revealing a softly sunlit ocean. Secure a solid oak rail to the wall; hang each garment from its own wooden hanger with every hook properly supported. The jacket hangs open over the top, while the trousers hang naturally beside them. Place the shoes together on a sturdy oak bench, soles resting flat. A low woven basket may sit on the floor, away from the outfit.\nUse bright coastal daylight, crisp reflections on the tile, and a refined white, blue, and natural-oak palette for a memorable yet product-relevant scene suggesting an easy family getaway. Keep the complete clothing set tack-sharp and unobstructed. No people, added text, signage, watermark, packaging, or box.",
+       "photo": "images.jpeg",
+       "folder": "r2_2_r2",
+       "text_model": "gpt-6-luna",
+       "effort": "xhigh",
+       "run_n": 1,
+       "id": "5f141443",
+       "created": "2026-11-01T17:19:44",
+       "file": "out_001_images_1.png",
+       "photo_key": "r2_2_r2/in_001_images.jpg"
+      }
+     ]
+    }
+   }
   }
  }
 }

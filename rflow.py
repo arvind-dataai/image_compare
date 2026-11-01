@@ -33,6 +33,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import batch
+import imgchoices
 import main as core
 import scene_library as sl
 from costing import estimate_inr, log_text_cost, text_rate
@@ -46,9 +47,6 @@ DEFAULT_B = (HERE / "r1_prompt_b.txt").read_text(encoding="utf-8")
 IMAGE_MODEL, QUALITY = batch.BATCH_MODEL, batch.BATCH_QUALITY
 KINDS = ("r2", "r3", "r4")
 R2LIKE = ("r2", "r4")                 # R4 behaves exactly like R2 (own library), except for step 3
-# R4 step 3: no prompt box; the image model and quality are chosen in the page
-R4_CHOICES = {"flare-low": ("gpt-image-2.5-flare", "low"), "flare-medium": ("gpt-image-2.5-flare", "medium"),
-              "sunburst-low": ("gpt-image-2.5-sunburst", "low"), "sunburst-medium": ("gpt-image-2.5-sunburst", "medium")}
 _FOLDER = re.compile(r"^(r2|r3|r4)_\d+_[A-Za-z0-9_.+\-]+$")
 LOCK = threading.RLock()
 POOL = ThreadPoolExecutor(max_workers=int(__import__("os").getenv("WEB_BATCH_WORKERS", "3")))
@@ -456,6 +454,7 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
             raise RuntimeError("Run step 1 for this photo first.")
         text, lib_id, run_n, scene_cost = _scene_of(kind, it, sel)
         label = f"Scene {sub}"
+        srun = next((r for r in it["scene_runs"] if r["n"] == run_n), None)
         if kind == "r3":
             s = lib.get(lib_id)
             key = f"{folder}/{it['input']}"
@@ -472,7 +471,8 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
         with LOCK:
             it["images"].append({"n": n, "gen": gen, "sub": sub, "subs": subs, "created": _now(), "category": cur["category"],
                                  "subcategory": cur["subcategory"], "id_run": cur["n"], "id_model": cur["text_model"],
-                                 "id_effort": cur["effort"], "id_cost_inr": id_cost, "scene_run": run_n, "scene_cost_inr": scene_cost,
+                                 "id_effort": cur["effort"], "id_cost_inr": id_cost, "scene_run": run_n,
+                                 "scene_model": (srun or {}).get("text_model", ""), "scene_effort": (srun or {}).get("effort", ""), "scene_cost_inr": scene_cost,
                                  "image_model": model, "quality": quality, "lib_id": lib_id, "scene_text": text, "prompt_b": prompt_b, "prompt_c": prompt_c, "size": size,
                                  "file": fname, "cost_inr": round(cost, 4)})
             job["total_inr"] = round(job.get("total_inr", 0) + cost, 4)
@@ -541,7 +541,7 @@ def rf_options(kind: str):
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
         "prompt_id": DEFAULT_ID, "prompt_scene": DEFAULT_SCENE, "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
         "image_model": IMAGE_MODEL, "quality": QUALITY, "est_image_inr_1024": round(estimate_inr(QUALITY, IMAGE_MODEL), 4),
-        "image_choices": [{"id": k, "model": m, "quality": q, "label": f"{m} · {q}", "est_inr_1024": round(estimate_inr(q, m), 4)} for k, (m, q) in R4_CHOICES.items()] if kind == "r4" else [],
+        "image_choices": imgchoices.for_page(),
     }
 
 
@@ -708,12 +708,9 @@ def rf_pick(kind: str, folder: str, body: Pick):
 @router.post("/api/rf/{kind}/{folder}/image")
 def rf_image(kind: str, folder: str, prompt_b: str = Form(""), size: str = Form("1088x1360"), indexes: str = Form(""), image_choice: str = Form("")):
     job = _get(_kind(kind), folder)
-    model, quality = IMAGE_MODEL, QUALITY
+    model, quality = imgchoices.pick(image_choice)
     if kind == "r4":
         prompt_b = ""                                     # R4 has no prompt box: the final prompt is the chosen scene alone
-        if image_choice not in R4_CHOICES:
-            raise HTTPException(400, "Choose the image model and quality.")
-        model, quality = R4_CHOICES[image_choice]
     if len(prompt_b) > 30000:
         raise HTTPException(400, "The prompt is too long (limit 30,000 characters).")
     core._check_size(size)
