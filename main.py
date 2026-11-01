@@ -469,3 +469,5 @@ from r1 import router as r1_router  # noqa: E402  (R1 tab: prompt A -> several p
 app.include_router(r1_router)
 from rflow import router as rflow_router  # noqa: E402  (R2 and R3 tabs: identify -> scenes -> image)
 app.include_router(rflow_router)
+from reset import router as reset_router  # noqa: E402  (reset button: wipe all runs and History)
+app.include_router(reset_router)

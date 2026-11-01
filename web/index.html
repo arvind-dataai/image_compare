@@ -177,7 +177,14 @@ details.adv[open]>summary{margin-bottom:10px}
 </head>
 <body>
 <div class="wrap">
-<header><h1>Image compare</h1></header>
+<header><h1>Image compare</h1><button class="ghost" id="rstOpen" style="margin-left:auto">Reset app</button></header>
+<div class="card hide" id="rstBox" style="border-color:#c0392b">
+ <b>Reset the whole app</b>
+ <p class="hint" style="margin:4px 0 8px">Deletes every run, image, History entry and the cost log, and clears everything the server remembers, so the app is completely fresh. This cannot be undone.</p>
+ <label class="hint" style="display:block;margin:0 0 8px"><input type="checkbox" id="rstLib"> Also delete the scene libraries (R2, R3, R4 and the old Batch one). Leave this unticked to keep them.</label>
+ <input id="rstTxt" placeholder="Type RESET" style="width:140px;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px">
+ <button class="primary" id="rstGo" style="margin-left:8px">Reset now</button> <button class="ghost" id="rstNo">Cancel</button> <span class="msg" id="rstMsg"></span>
+</div>
 <nav>
   <button data-tab="new" hidden>New run</button>
   <button data-tab="batch" hidden>Batch</button>
@@ -1646,6 +1653,13 @@ $$("input[name=libsel]").forEach(r=>r.onchange=loadLib); $("#libreload").onclick
 sinit().catch(e=>{$("#sfmsg").textContent="Could not load scene options: "+e.message});
 init().catch(e=>{$("#msg").textContent="Could not load: "+e.message});
 r1Init();   /* R1 is the first tab now */
+$("#rstOpen").onclick=()=>{$("#rstBox").classList.toggle("hide")};
+$("#rstNo").onclick=()=>{$("#rstBox").classList.add("hide");$("#rstTxt").value="";$("#rstMsg").textContent=""};
+$("#rstGo").onclick=async()=>{
+  const fd=new FormData(); fd.append("confirm",$("#rstTxt").value); fd.append("libraries",$("#rstLib").checked?"true":"false");
+  $("#rstMsg").textContent="";
+  try{await api("/api/reset",{method:"POST",body:fd}); location.reload()}catch(e){$("#rstMsg").textContent=e.message}
+};
 </script>
 </body>
 </html>
