@@ -65,7 +65,7 @@ SCENES_FORMAT = (
     'Reply with ONE JSON object and nothing else (no markdown, no text before or after):\n'
     '{"scenes": ["first scene", "second scene", "..."]}\n'
     'Each item of the list is ONE complete scene written as one string, laid out exactly as the instructions above describe '
-    '(use \\n between its lines). Write as many scenes as the instructions above ask for; if they give no number, write 8.'
+    '(use \\n between its lines). Write EXACTLY as many scenes as the instructions above ask for, never fewer, each one a separate item of the list; if they give no number, write 8.'
 )
 
 
@@ -398,8 +398,23 @@ def _scenes_body(job: dict, i: int, cfg: dict, cur: dict):
         ctx = (f"CONTEXT\nPRODUCT\ncategory: {cat}\nsubcategory: {sub}\ndescription: {cur['description']}\n\n"
                f"EXISTING SCENES IN THE SCENE LIBRARY FOR THIS SUBCATEGORY ({len(existing)}):\n{listing}")
         instr = cfg["prompt"].strip() + "\n\n" + ctx + "\n\n" + SCENES_FORMAT
-        tiles, cost = _text_call(job, "2 scenes", cfg, instr, "Write the scenes for the product in the attached photo, as instructed.",
-                                 _image_of(folder, it), _parse_scenes, f"{folder}/{it['input']}")
+        m = re.search(r"\bwrite\s+(\d{1,2})\b", cfg["prompt"], re.I)
+        wanted, best = (int(m.group(1)) if m else 0), []
+
+        def parse(text):                                               # fewer scenes than the prompt asks for -> ask once more, keep the best reply
+            t = _parse_scenes(text)
+            if len(t) > len(best):
+                best[:] = t
+            if wanted and len(t) < wanted:
+                raise ValueError(f"only {len(t)} scenes, the instructions ask for {wanted}: write all {wanted}, each as its own item")
+            return t
+        try:
+            tiles, cost = _text_call(job, "2 scenes", cfg, instr, "Write the scenes for the product in the attached photo, as instructed.",
+                                     _image_of(folder, it), parse, f"{folder}/{it['input']}")
+        except RuntimeError as e:
+            if not best:
+                raise
+            tiles, cost = best, getattr(e, "cost", 0.0)                # the model still gave fewer: keep what it wrote
         run["cost_inr"] = round(cost, 4)
         run["tiles"] = tiles
         if kind == "r3":                                               # R3 saves every scene it writes, unused until an image is made from it

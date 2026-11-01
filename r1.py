@@ -45,7 +45,7 @@ EST_OUT = {"none": 500, "minimal": 600, "low": 900, "medium": 1800, "high": 3500
 R1_FORMAT = (
     'Reply with ONE JSON object and nothing else (no markdown, no text before or after):\n'
     '{"prompts": ["first prompt", "second prompt", "..."]}\n'
-    'Each item of the list is one complete prompt, written as one plain string. The prompts must differ from one another.'
+    'Each item of the list is one complete prompt, written as one plain string. The prompts must differ from one another. Write exactly as many as the instructions above ask for, never fewer, each as its own item of the list.'
 )
 USER_TEXT = "Write the prompts for the product shown in the attached photo, as instructed."
 
