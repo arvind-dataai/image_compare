@@ -1093,13 +1093,13 @@ let R1O=null, R1={folder:"",job:null}, r1files=[], r1timer=null, r1ready=false, 
 const r1Busy=()=>!!(R1.job&&R1.job.items.some(i=>i.running));
 function r1Models(){
   $("#r1model").innerHTML=R1O.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
-  const f=R1O.text_models.find(t=>t.available); if(f)$("#r1model").value=f.id;
+  const f=R1O.text_models.find(t=>t.id==="gpt-6-luna"&&t.available)||R1O.text_models.find(t=>t.available); if(f)$("#r1model").value=f.id;
 }
 function r1Effs(){
   const t=R1O.text_models.find(x=>x.id===$("#r1model").value); if(!t)return;
   const prev=$("#r1eff").value;
   $("#r1eff").innerHTML=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
-  $("#r1eff").value=t.efforts.includes(prev)?prev:(t.efforts.includes("low")?"low":t.efforts[0]);
+  $("#r1eff").value=t.efforts.includes(prev)?prev:(t.efforts.includes("xhigh")?"xhigh":t.efforts[0]);
 }
 async function r1Init(){
   if(r1ready)return; r1ready=true;
