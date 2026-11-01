@@ -336,7 +336,7 @@ details.adv[open]>summary{margin-bottom:10px}
     </div>
     <div id="r1HasRun" class="hint hide"></div>
     <div class="pair" style="margin-top:10px"><div><div class="sub" style="margin:0 0 3px">Text model</div><select id="r1model"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select id="r1eff"></select></div></div>
-    <div class="sub" style="margin:10px 0 3px">How many prompts per photo</div><input id="r1count" type="number" min="1" value="5" style="width:90px;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px">
+    <p class="hint">The number of prompts is whatever your Prompt A asks for.</p>
    </div>
    <div>
     <h2>Prompt A</h2>
@@ -1104,9 +1104,9 @@ async function r1Init(){
   try{R1O=await api("/api/r1/options")}catch(e){$("#r1msg").textContent=e.message;r1ready=false;return}
   r1Models(); r1Effs();
   $("#r1size").innerHTML=R1O.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
-  $("#r1b").value=R1O.prompt_b; r1cc();
+  $("#r1b").value=R1O.prompt_b; $("#r1a").value=R1O.prompt_a||""; r1cc();
   $("#r1model").onchange=()=>{r1Effs();r1Refresh()};
-  ["#r1eff","#r1count","#r1size"].forEach(i=>$(i).addEventListener("input",r1Refresh));
+  ["#r1eff","#r1size"].forEach(i=>$(i).addEventListener("input",r1Refresh));
   $("#r1a").addEventListener("input",()=>{r1cc();r1Refresh()});
   $("#r1b").addEventListener("input",()=>{r1cc();r1Preview()});
   $("#r1breset").onclick=()=>{$("#r1b").value=R1O.prompt_b;r1cc();r1Preview()};
@@ -1137,7 +1137,7 @@ function r1Reset(){
 }
 function r1Estimate(){
   const t=R1O&&R1O.text_models.find(x=>x.id===$("#r1model").value); if(!t)return 0;
-  const n=Math.max(1,+$("#r1count").value||1);
+  const n=5;
   return (R1O.est_in*t.rate_in+((R1O.est_out[$("#r1eff").value]||0)+n*150)*t.rate_out)/1e6*R1O.usd_to_inr;
 }
 function r1Refresh(){
@@ -1163,7 +1163,7 @@ async function r1Prompts(indexes){
       R1.folder=c.folder; R1.job=await api("/api/r1/"+encodeURIComponent(c.folder));
     }
     const fd=new FormData(); fd.append("prompt_a",$("#r1a").value); fd.append("text_model",$("#r1model").value);
-    fd.append("effort",$("#r1eff").value); fd.append("count",$("#r1count").value||"5"); fd.append("indexes",indexes);
+    fd.append("effort",$("#r1eff").value); fd.append("indexes",indexes);
     await api(`/api/r1/${encodeURIComponent(R1.folder)}/prompts`,{method:"POST",body:fd});
     r1Poll();
   }catch(e){$("#r1msg").textContent=e.message; r1Refresh()}
@@ -1193,7 +1193,7 @@ function r1Render(){
   if(!j){r1Refresh();return}
   $("#r1tiles").classList.remove("hide");
   $("#r1tiles").innerHTML=`<label class="hint" style="display:block;margin:0 0 8px"><input type="checkbox" id="r1allx" ${r1all?"checked":""}> Show every prompt in full</label>`+j.items.map((it,i)=>{
-    const runs=it.runs.slice().reverse().map(r=>`<div class="r1run"><div class="hint" style="margin:0 0 2px">Run ${r.n} · ${esc(r.text_model)} · ${esc(r.effort)} · asked for ${r.count} · ${inr(r.cost_inr)} · ${esc(r.created)}</div>
+    const runs=it.runs.slice().reverse().map(r=>`<div class="r1run"><div class="hint" style="margin:0 0 2px">Run ${r.n} · ${esc(r.text_model)} · ${esc(r.effort)} · ${inr(r.cost_inr)} · ${esc(r.created)}</div>
       ${r.error?`<div class="err">${esc(r.error)}</div>`:""}
       <div class="tiles">${r.tiles.map((t,k)=>`<div class="tile ${(it.sels||[]).some(x=>x.run===r.n&&x.tile===k)?"sel":""} ${r1all||R1X.has(i+":"+r.n+":"+k)?"open":""}" data-pick="${i}:${r.n}:${k}"><span class="xp" data-xp="${i}:${r.n}:${k}">${r1all||R1X.has(i+":"+r.n+":"+k)?"Collapse":"Expand"}</span><span class="k">Prompt ${k+1}${(it.sels||[]).some(x=>x.run===r.n&&x.tile===k)?" · chosen":""}</span>${esc(t)}</div>`).join("")}</div></div>`).join("");
     return `<div class="r1photo"><div class="r1head"><figure style="width:72px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:8px"></figure>

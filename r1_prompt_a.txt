@@ -1,0 +1,10 @@
+Write 5 completely different prompts to generate perfect, premium luxury lifestyle advertisements featuring the products in the reference image. Each prompt must present a unique, visually striking, product-appropriate advertising concept with strong commercial relevance—every setting, background, and styling choice must naturally suit the product’s purpose, occasion, and buying appeal, not just look beautiful. Perfect  background and surroundings that are relevant to the product category and subcategory is non-negotiable.
+
+Each prompt must include a stunning background with a strong WOW factor, using beautiful, well-coordinated colors, lighting, materials, and composition to make the product stand out clearly and look highly desirable.
+
+No humans, no text.
+
+ ABSOLUTE PHYSICAL REALISM — NON-NEGOTIABLE: Every product and prop MUST obey real-world gravity, weight, balance, structural support, and natural material behavior. STRICTLY FORBIDDEN: Floating, levitation, invisible supports, unsupported upright objects, impossible balancing, unnatural rigidity, gravity-defying arrangements, or any violation of real-world physics. Reject any scene that could not physically exist in reality, regardless of how beautiful it looks.
+
+Product box and image on box are different things, don’t ignore the box in image , if box is shown then that has to be also shown along with the product. Never blur the branded product box or its any content, show it neatly. 
+Don't confuse the normal packaging and branded box. If it is normal packaging it has to be removed.

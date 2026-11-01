@@ -31,6 +31,7 @@ router = APIRouter()
 
 HERE = Path(__file__).parent
 DEFAULT_B = (HERE / "r1_prompt_b.txt").read_text(encoding="utf-8")
+DEFAULT_A = (HERE / "r1_prompt_a.txt").read_text(encoding="utf-8")
 IMAGE_MODEL, QUALITY = batch.BATCH_MODEL, batch.BATCH_QUALITY
 _FOLDER = re.compile(r"^r1_\d+_[A-Za-z0-9_.+\-]+$")
 LOCK = threading.RLock()
@@ -181,7 +182,7 @@ def _do_prompts(job: dict, i: int, cfg: dict):
     err, run_cost, tiles, last = "", 0.0, [], ""
     try:
         provider = _models()[1][cfg["text_model"]]
-        instr = (cfg["prompt_a"].strip() + f"\n\nWrite exactly {cfg['count']} different prompts.\n\n" + R1_FORMAT)
+        instr = (cfg["prompt_a"].strip() + (f"\n\nWrite exactly {cfg['count']} different prompts." if cfg.get("count") else "") + "\n\n" + R1_FORMAT)
         for attempt in (1, 2):
             extra = "" if attempt == 1 else (f"\n\nYour previous reply could not be used ({last}). "
                                              "Reply again with ONLY the JSON object described above.")
@@ -281,7 +282,7 @@ def r1_options():
                          "rate_in": text_rate(k)[0], "rate_out": text_rate(k)[1]} for k, v in tm.items()],
         "efforts": EFFORTS, "est_in": EST_IN, "est_out": EST_OUT, "usd_to_inr": core.USD_TO_INR,
         "sizes": [{"id": k, "label": v} for k, v in SIZES.items()],
-        "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
+        "prompt_a": DEFAULT_A, "prompt_b": DEFAULT_B, "max_photos": MAX_PHOTOS,
         "image_model": IMAGE_MODEL, "quality": QUALITY, "est_image_inr_1024": round(estimate_inr(QUALITY, IMAGE_MODEL), 4),
     }
 
@@ -315,15 +316,13 @@ def r1_get(folder: str):
 
 @router.post("/api/r1/{folder}/prompts")
 def r1_prompts(folder: str, prompt_a: str = Form(...), text_model: str = Form(...), effort: str = Form(...),
-               count: int = Form(5), indexes: str = Form("")):
+               count: int = Form(0), indexes: str = Form("")):
     job = _get(folder)
     prompt_a = prompt_a.strip()
     if not prompt_a:
         raise HTTPException(400, "Write Prompt A first.")
     if len(prompt_a) > 20000:
         raise HTTPException(400, "Prompt A is too long (limit 20,000 characters).")
-    if count < 1:
-        raise HTTPException(400, "Ask for at least 1 prompt.")
     _check_model(text_model, effort)
     todo = _targets(job, indexes)
     _begin(job, todo, "prompts")
