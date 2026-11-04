@@ -1,6 +1,7 @@
 import base64
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
@@ -21,6 +22,9 @@ from prompts import (
 )
 
 load_dotenv()
+os.environ["TZ"] = "Asia/Kolkata"          # every timestamp (runs, History, cost log) is in Indian Standard Time
+if hasattr(time, "tzset"):
+    time.tzset()
 COST_LOG = str(Path(__file__).parent / "cost_log.csv")
 OUTPUT_DIR = Path(__file__).parent / "outputs"  # one numbered sub-folder per request
 

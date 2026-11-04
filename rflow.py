@@ -58,7 +58,7 @@ EST_OUT = {"none": 500, "minimal": 600, "low": 900, "medium": 1800, "high": 3500
 
 CLASSIFY_FORMAT = (
     'Reply with ONE JSON object and nothing else (no markdown, no text before or after):\n'
-    '{"category": "...", "subcategory": "...", "product_description": "two or three plain sentences about the product as described above", '
+    '{"product_type": "the plain name of the exact kind of product, decided from the photo before looking at the library", "category": "...", "subcategory": "...", "product_description": "two or three plain sentences about the product as described above", '
     '"reason": "one or two sentences: why it belongs there and which existing option you considered closest"}'
 )
 SCENES_FORMAT = (
@@ -309,7 +309,7 @@ def _do_identify(job: dict, i: int, cfg: dict):
             cat, sub, new_cat, new_sub = lib.resolve(str(d["category"]), str(d["subcategory"]))
             lib.ensure(cat, sub)
         run.update(category=cat, subcategory=sub, new_category=new_cat, new_subcategory=new_sub,
-                   raw_category=str(d["category"]), raw_subcategory=str(d["subcategory"]),
+                   raw_category=str(d["category"]), raw_subcategory=str(d["subcategory"]), product_type=str(d.get("product_type", "")).strip(),
                    description=str(d["product_description"]).strip(), reason=str(d.get("reason", "")).strip())
     except Exception as e:
         err = str(getattr(e, "detail", None) or e)
@@ -470,6 +470,7 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
         text, lib_id, run_n, scene_cost = _scene_of(kind, it, sel)
         label = f"Scene {sub}"
         srun = next((r for r in it["scene_runs"] if r["n"] == run_n), None)
+        scene_tile = (sel.get("tile", 0) + 1) if kind in R2LIKE else ((srun["lib_ids"].index(lib_id) + 1) if srun and lib_id in srun.get("lib_ids", []) else 0)
         if kind == "r3":
             s = lib.get(lib_id)
             key = f"{folder}/{it['input']}"
@@ -487,6 +488,7 @@ def _do_image(job: dict, i: int, sel: dict, gen: int, sub: int, subs: int, promp
             it["images"].append({"n": n, "gen": gen, "sub": sub, "subs": subs, "created": _now(), "category": cur["category"],
                                  "subcategory": cur["subcategory"], "id_run": cur["n"], "id_model": cur["text_model"],
                                  "id_effort": cur["effort"], "id_cost_inr": id_cost, "scene_run": run_n,
+                                 "scene_tile": scene_tile,
                                  "scene_model": (srun or {}).get("text_model", ""), "scene_effort": (srun or {}).get("effort", ""), "scene_cost_inr": scene_cost,
                                  "image_model": model, "quality": quality, "lib_id": lib_id, "scene_text": text, "prompt_b": prompt_b, "prompt_c": prompt_c, "size": size,
                                  "file": fname, "cost_inr": round(cost, 4)})
