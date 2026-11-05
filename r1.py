@@ -44,8 +44,8 @@ EST_OUT = {"none": 500, "minimal": 600, "low": 900, "medium": 1800, "high": 3500
 
 R1_FORMAT = (
     'Reply with ONE JSON object and nothing else (no markdown, no text before or after):\n'
-    '{"prompts": ["first prompt", "second prompt", "..."]}\n'
-    'Each item of the list is one complete prompt, written as one plain string. The prompts must differ from one another. Write exactly as many as the instructions above ask for, never fewer, each as its own item of the list.'
+    '{"prompts": ["<one prompt per item>"]}\n'
+    'Put each prompt you write in its own item of the list. Write each prompt in your own way and your own words; no layout or format is imposed on it.'
 )
 USER_TEXT = "Write the prompts for the product shown in the attached photo, as instructed."
 
@@ -183,7 +183,7 @@ def _do_prompts(job: dict, i: int, cfg: dict):
     err, run_cost, tiles, last = "", 0.0, [], ""
     try:
         provider = _models()[1][cfg["text_model"]]
-        instr = (cfg["prompt_a"].strip() + (f"\n\nWrite exactly {cfg['count']} different prompts." if cfg.get("count") else "") + "\n\n" + R1_FORMAT)
+        instr = (cfg["prompt_a"].strip() + "" + "\n\n" + R1_FORMAT)
         for attempt in (1, 2):
             extra = "" if attempt == 1 else (f"\n\nYour previous reply could not be used ({last}). "
                                              "Reply again with ONLY the JSON object described above.")
