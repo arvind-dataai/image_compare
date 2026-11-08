@@ -475,3 +475,5 @@ from rflow import router as rflow_router  # noqa: E402  (R2 and R3 tabs: identif
 app.include_router(rflow_router)
 from reset import router as reset_router  # noqa: E402  (reset button: wipe all runs and History)
 app.include_router(reset_router)
+from jewel import router as jewel_router  # noqa: E402  (Jewellery tab: 15 scene prompts -> scene -> flare / sunburst image)
+app.include_router(jewel_router)

@@ -190,6 +190,7 @@ details.adv[open]>summary{margin-bottom:10px}
   <button data-tab="batch" hidden>Batch</button>
   <button data-tab="r1" class="on">R1</button>
   <button data-tab="r2">R2</button>
+  <button data-tab="jw">Jewellery</button>
   <button data-tab="r3" hidden>R3</button>
   <button data-tab="r4" hidden>R4</button>
   <button data-tab="brev" hidden>Batch review</button>
@@ -375,6 +376,56 @@ details.adv[open]>summary{margin-bottom:10px}
 </section>
 
 <section id="tab-r2" class="hide"></section>
+<section id="tab-jw" class="hide">
+ <div class="hero-lite">
+  <span class="t" id="jwLabel">New jewellery run</span>
+  <span class="chip hide" id="jwCost"></span>
+  <button class="ghost" id="jwNew">Start a new run</button>
+ </div>
+
+ <div class="stepcard s1">
+  <div class="stephead"><span class="num">1</span><div><b>Choose a prompt: the text model writes ONE scene for the photo</b><div class="hint" style="margin:0">15 prompts, each a different real use case or display method for jewellery. Every run writes a new scene, different from the earlier ones for the same photo.</div></div></div>
+  <div class="form">
+   <div>
+    <div id="jwUpload">
+     <h2>Jewellery photo <span class="hint">(one or many)</span></h2>
+     <label class="drop" id="jwdrop"><input type="file" id="jwfile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+       <div>Click or drop the photo here (PNG, JPEG, WEBP)</div></label>
+     <div id="jwthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px"></div>
+     <input id="jwname" type="text" placeholder="Run name (optional)" style="margin-top:8px;width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    </div>
+    <div id="jwHasRun" class="hint hide"></div>
+    <div class="sub" style="margin:12px 0 3px">Scene prompt (1 of 15)</div><select id="jwpick"></select>
+    <p class="hint" id="jwsum" style="margin:4px 0 0"></p>
+    <div class="pair" style="margin-top:10px"><div><div class="sub" style="margin:0 0 3px">Text model</div><select id="jwmodel"></select></div><div><div class="sub" style="margin:0 0 3px">Effort</div><select id="jweff"></select></div></div>
+   </div>
+   <div>
+    <h2>The prompt that will be sent <button class="ghost" id="jwpreset" style="float:right;padding:2px 10px;font-size:12.5px">Reset to this prompt</button></h2>
+    <textarea id="jwp" style="min-height:300px"></textarea><div class="cc"><span id="cc_jwp">0</span> characters</div>
+    <p class="hint">The app adds a "creative brief" after this text (a setting, colours, light, camera, presentation and props picked so that each run differs from the earlier ones for the same photo) and the opening of the scenes already written for it. You can edit this text; the 15 originals are kept.</p>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="jwgo" disabled>Write the scene</button><span class="est" id="jwest"></span><span class="msg" id="jwmsg"></span></div>
+  <div id="jwscenes" class="hide" style="margin-top:14px"></div>
+ </div>
+
+ <div class="stepcard s3">
+  <div class="stephead"><span class="num">2</span><div><b>The scene + your image prompt + the photo: make the image</b><div class="hint" style="margin:0">Final prompt = the image prompt below, then the scene. The photo goes with it. Uses the scene marked "used for the image" under each photo.</div></div></div>
+  <div class="form">
+   <div>
+    <h2>Image prompt <button class="ghost" id="jwbreset" style="float:right;padding:2px 10px;font-size:12.5px">Reset to default</button></h2>
+    <textarea id="jwb" style="min-height:260px"></textarea><div class="cc"><span id="cc_jwb">0</span> characters</div>
+   </div>
+   <div>
+    <div class="sub" style="margin:0 0 3px">Image model</div><select id="jwim"></select>
+    <div class="sub" style="margin:10px 0 3px">Size</div><select id="jwsize"></select>
+    <p class="hint">Make an image again with the other model, or write another scene first. Every image is kept in History with the prompts that made it.</p>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="jwimg" disabled>Make the images</button><span class="est" id="jwimgest"></span><span class="msg" id="jwimgmsg"></span></div>
+  <div id="jwimgs" class="hide" style="margin-top:14px"></div>
+ </div>
+</section>
 <section id="tab-r3" class="hide"></section>
 <section id="tab-r4" class="hide"></section>
 
@@ -426,6 +477,7 @@ details.adv[open]>summary{margin-bottom:10px}
     <label><input type="radio" name="hfilter" value="r2">R2</label>
     <label><input type="radio" name="hfilter" value="r3">R3</label>
     <label><input type="radio" name="hfilter" value="r4">R4</label>
+    <label><input type="radio" name="hfilter" value="jw">Jewellery</label>
     <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
    </div>
    <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
@@ -455,8 +507,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","batch","r1","r2","r3","r4","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(rIsR(b.dataset.tab)&&b.dataset.tab!=="r1")rInit(b.dataset.tab); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
+  ["new","batch","r1","r2","jw","r3","r4","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="jw")jwInit(); if(rIsR(b.dataset.tab)&&b.dataset.tab!=="r1")rInit(b.dataset.tab); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
 });
 
 /* ---------- lightbox ---------- */
@@ -1562,18 +1614,18 @@ function histShow(){
   $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
   const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`;
   $("#hlist").innerHTML=rows.length?rows.map(r=>{
-    const kind=r.type==="single"?"Single run":rIsR(r.type)?r.type.toUpperCase():r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const kind=r.type==="single"?"Single run":r.type==="jw"?"Jewellery":rIsR(r.type)?r.type.toUpperCase():r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
     const st=r.state;
-    const open=r.type==="single"?"single":r.type==="multi"?"multi":rIsR(r.type)?r.type:"batch";
-    const more=rIsR(r.type)?((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"")+(r.selected||[]).map(x=>`<div class="hm"><b>Selected ${r.type==="r1"?"prompt":"scene"}${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+    const open=r.type==="single"?"single":r.type==="multi"?"multi":(rIsR(r.type)||r.type==="jw")?r.type:"batch";
+    const more=(rIsR(r.type)||r.type==="jw")?((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"")+(r.selected||[]).map(x=>`<div class="hm"><b>${r.type==="jw"?"Last scene":"Selected "+(r.type==="r1"?"prompt":"scene")}${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
       ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
     const sel=r.type==="single"?`<label class="hint" style="display:block;margin-top:4px"><input type="checkbox" data-hsel="${esc(r.folder)}" ${HSEL.has(r.folder)?"checked":""}> select to compare</label>`:"";
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
-       <div class="hm">${esc(r.created)} · ${r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:(rIsR(r.type)&&r.type!=="r1")?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.id_runs} identification${r.id_runs===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="hm">${esc(r.created)} · ${r.type==="jw"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.scene_runs} scene${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:(rIsR(r.type)&&r.type!=="r1")?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.id_runs} identification${r.id_runs===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
        ${sel}<div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||rIsR(r.type))?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||rIsR(r.type)||r.type==="jw")?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -1614,6 +1666,7 @@ $("#hlist").addEventListener("click",async e=>{
   const o=e.target.closest("[data-hopen]");
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
+    else if(kind==="jw"){$('nav button[data-tab="jw"]').click(); jwOpen(folder)}
     else if(kind==="r1"){$('nav button[data-tab="r1"]').click(); r1Open(folder)}
     else if(rIsR(kind)&&kind!=="r1"){$('nav button[data-tab="'+kind+'"]').click(); rOpen(kind,folder)}
     else if(kind==="multi"){gcache={}; $('nav button[data-tab="new"]').click(); pollGroup(folder); $("#result").scrollIntoView({behavior:"smooth"})}
@@ -1652,6 +1705,177 @@ $$("input[name=libsel]").forEach(r=>r.onchange=loadLib); $("#libreload").onclick
 
 sinit().catch(e=>{$("#sfmsg").textContent="Could not load scene options: "+e.message});
 init().catch(e=>{$("#msg").textContent="Could not load: "+e.message});
+/* ================= Jewellery ================= */
+let JWO=null, JW={folder:"",job:null}, jwfiles=[], jwtimer=null, jwready=false;
+const jwBusy=()=>!!(JW.job&&JW.job.items.some(i=>i.running));
+function jwModels(){
+  $("#jwmodel").innerHTML=JWO.text_models.map(t=>`<option value="${esc(t.id)}" ${t.available?"":"disabled"}>${esc(t.id)}${t.available?"":" (needs "+esc(t.needs)+")"}</option>`).join("");
+  const f=JWO.text_models.find(t=>t.id==="gpt-6-luna"&&t.available)||JWO.text_models.find(t=>t.available); if(f)$("#jwmodel").value=f.id;
+}
+function jwEffs(){
+  const t=JWO.text_models.find(x=>x.id===$("#jwmodel").value); if(!t)return;
+  const prev=$("#jweff").value;
+  $("#jweff").innerHTML=t.efforts.map(x=>`<option value="${x}">${x}</option>`).join("");
+  $("#jweff").value=t.efforts.includes(prev)?prev:(t.efforts.includes("xhigh")?"xhigh":t.efforts[0]);
+}
+const jwPrompt=()=>JWO.prompts.find(p=>p.id===+$("#jwpick").value)||JWO.prompts[0];
+function jwPicked(){const p=jwPrompt(); $("#jwp").value=p.prompt; $("#jwsum").textContent=p.summary; jwcc(); jwRefresh()}
+async function jwInit(){
+  if(jwready)return; jwready=true;
+  try{JWO=await api("/api/jw/options")}catch(e){$("#jwmsg").textContent=e.message;jwready=false;return}
+  jwModels(); jwEffs();
+  $("#jwpick").innerHTML=JWO.prompts.map(p=>`<option value="${p.id}">${p.id}. ${esc(p.title)}</option>`).join("");
+  $("#jwim").innerHTML=JWO.image_choices.map(c=>`<option value="${c.id}" ${c.id==="sunburst-low"?"selected":""}>${esc(c.label)}</option>`).join("");
+  $("#jwsize").innerHTML=JWO.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  $("#jwb").value=JWO.image_prompt; jwPicked();
+  $("#jwpick").onchange=jwPicked;
+  $("#jwpreset").onclick=jwPicked;
+  $("#jwmodel").onchange=()=>{jwEffs();jwRefresh()};
+  ["#jweff","#jwsize","#jwim"].forEach(i=>$(i).addEventListener("input",jwRefresh));
+  $("#jwp").addEventListener("input",()=>{jwcc();jwRefresh()});
+  $("#jwb").addEventListener("input",()=>{jwcc();jwRefresh()});
+  $("#jwbreset").onclick=()=>{$("#jwb").value=JWO.image_prompt;jwcc();jwRefresh()};
+  $("#jwfile").onchange=e=>{jwAdd(e.target.files);e.target.value=""};
+  const d=$("#jwdrop");
+  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
+  d.addEventListener("drop",e=>jwAdd(e.dataTransfer.files));
+  $("#jwthumbs").addEventListener("click",e=>{const b=e.target.closest("[data-jwrm]"); if(b){e.preventDefault();jwfiles.splice(+b.dataset.jwrm,1);jwThumbs();jwRefresh()}});
+  $("#jwgo").onclick=()=>jwScene("");
+  $("#jwimg").onclick=()=>jwImage("");
+  $("#jwNew").onclick=jwReset;
+  $("#jwscenes").addEventListener("click",jwClick);
+  $("#jwimgs").addEventListener("click",jwClick);
+  jwRefresh();
+}
+function jwcc(){["jwp","jwb"].forEach(t=>{$("#cc_"+t).textContent=$("#"+t).value.length.toLocaleString("en-IN")})}
+function jwAdd(list){
+  for(const f of Array.from(list||[])){ if(!/^image\//.test(f.type))continue; f._url=URL.createObjectURL(f); jwfiles.push(f); }
+  jwThumbs(); jwRefresh();
+}
+function jwThumbs(){
+  $("#jwthumbs").innerHTML=jwfiles.map((f,i)=>`<figure style="margin:0;position:relative"><img src="${f._url}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px"><button type="button" class="ghost" data-jwrm="${i}" title="Remove" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:14px;line-height:1.3">&times;</button></figure>`).join("");
+}
+function jwReset(){
+  clearTimeout(jwtimer); JW={folder:"",job:null}; jwfiles=[]; jwThumbs(); $("#jwname").value="";
+  $("#jwscenes").classList.add("hide"); $("#jwimgs").classList.add("hide"); $("#jwmsg").textContent=""; $("#jwimgmsg").textContent="";
+  jwRender(); jwRefresh();
+}
+function jwTextEst(){
+  const t=JWO&&JWO.text_models.find(x=>x.id===$("#jwmodel").value); if(!t)return 0;
+  return (JWO.est_in*t.rate_in+((JWO.est_out[$("#jweff").value]||0)+500)*t.rate_out)/1e6*JWO.usd_to_inr;
+}
+function jwRefresh(){
+  if(!JWO)return;
+  const has=!!(JW.folder&&JW.job), nph=has?JW.job.items.length:jwfiles.length, busy=jwBusy();
+  $("#jwUpload").classList.toggle("hide",has); $("#jwHasRun").classList.toggle("hide",!has);
+  if(has)$("#jwHasRun").textContent=`${nph} photo${nph===1?"":"s"} in this run. Press the button again to write another scene for every photo (each scene is kept), or use "Write another scene" under one photo.`;
+  const ok=$("#jwp").value.trim()&&nph&&!busy&&JWO.text_models.some(t=>t.id===$("#jwmodel").value&&t.available);
+  $("#jwgo").disabled=!ok; $("#jwgo").textContent=has?"Write another scene":"Write the scene";
+  $("#jwest").innerHTML=nph?`${nph} text call${nph===1?"":"s"} · rough estimate <b>≈ ${inr(jwTextEst()*nph)}</b>`:"";
+  const ready=has?JW.job.items.filter(i=>i.cur).length:0;
+  const [w,h]=$("#jwsize").value.split("x").map(Number), px=w*h/1048576;
+  $("#jwimg").disabled=!(ready&&!busy&&$("#jwb").value.trim());
+  const c=JWO.image_choices.find(x=>x.id===$("#jwim").value)||{est_inr_1024:0};
+  $("#jwimgest").innerHTML=ready?`${ready} image${ready===1?"":"s"} · rough estimate <b>≈ ${inr(ready*c.est_inr_1024*px)}</b>`:(has?"Write a scene first.":"");
+  if(has){$("#jwLabel").textContent=JW.job.name||"Jewellery run"; $("#jwCost").textContent="cost so far "+inr(JW.job.total_inr||0); $("#jwCost").classList.remove("hide")}
+  else{$("#jwLabel").textContent="New jewellery run"; $("#jwCost").classList.add("hide")}
+}
+async function jwScene(indexes){
+  $("#jwmsg").textContent=""; $("#jwgo").disabled=true;
+  try{
+    if(!JW.folder){
+      const fd=new FormData(); jwfiles.forEach(f=>fd.append("images",f)); fd.append("name",$("#jwname").value.trim());
+      const c=await api("/api/jw/create",{method:"POST",body:fd});
+      JW.folder=c.folder; JW.job=await api("/api/jw/"+encodeURIComponent(c.folder));
+    }
+    const fd=new FormData(); fd.append("prompt_id",$("#jwpick").value); fd.append("prompt_text",$("#jwp").value);
+    fd.append("text_model",$("#jwmodel").value); fd.append("effort",$("#jweff").value); fd.append("indexes",indexes);
+    await api(`/api/jw/${encodeURIComponent(JW.folder)}/scene`,{method:"POST",body:fd});
+    jwPoll();
+  }catch(e){$("#jwmsg").textContent=e.message; jwRefresh()}
+}
+async function jwImage(indexes){
+  $("#jwimgmsg").textContent=""; $("#jwimg").disabled=true;
+  try{
+    const fd=new FormData(); fd.append("image_prompt",$("#jwb").value); fd.append("size",$("#jwsize").value);
+    fd.append("image_choice",$("#jwim").value); fd.append("indexes",indexes);
+    await api(`/api/jw/${encodeURIComponent(JW.folder)}/image`,{method:"POST",body:fd});
+    jwPoll();
+  }catch(e){$("#jwimgmsg").textContent=e.message; jwRefresh()}
+}
+function jwPoll(){
+  clearTimeout(jwtimer);
+  const tick=async()=>{
+    try{JW.job=await api("/api/jw/"+encodeURIComponent(JW.folder)); jwRender();
+      if(jwBusy()){jwtimer=setTimeout(tick,2000);return}
+    }catch(e){jwtimer=setTimeout(tick,4000)}
+  };
+  tick();
+}
+async function jwOpen(folder){
+  clearTimeout(jwtimer); JW={folder,job:null}; jwfiles=[];
+  await jwInit();
+  try{JW.job=await api("/api/jw/"+encodeURIComponent(folder))}catch(e){$("#jwmsg").textContent=e.message;return}
+  if(JW.job.prompt_id){$("#jwpick").value=JW.job.prompt_id}
+  const last=JW.job.items.flatMap(i=>i.runs).slice(-1)[0];
+  if(last){$("#jwp").value=last.prompt_text; $("#jwmodel").value=last.text_model; jwEffs(); $("#jweff").value=last.effort}
+  if(JW.job.image_prompt)$("#jwb").value=JW.job.image_prompt;
+  if(JW.job.size)$("#jwsize").value=JW.job.size;
+  jwcc(); jwRender(); if(jwBusy())jwPoll();
+}
+function jwBriefChips(b){
+  const L={setting:"Setting",colours:"Colours",light:"Light",camera:"Camera",presentation:"Presentation",props:"Props"};
+  return Object.keys(L).filter(k=>b&&b[k]).map(k=>`<span class="chip" title="${esc(L[k])}: ${esc(b[k])}"><b>${L[k]}:</b> ${esc(b[k])}</span>`).join(" ");
+}
+function jwRender(){
+  const j=JW.job; jwRefresh();
+  if(!j){$("#jwscenes").classList.add("hide");$("#jwimgs").classList.add("hide");return}
+  const any=j.items.some(i=>i.runs.length||i.running==="scene");
+  $("#jwscenes").classList.toggle("hide",!any);
+  $("#jwscenes").innerHTML=j.items.map((it,i)=>{
+    const busy=!!it.running;
+    return `<div class="r1photo"><div class="r1head"><figure style="width:56px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure><b>Photo ${i+1}</b><span class="hint">${esc(it.orig_name)}</span>
+      <button class="ghost" data-jwmore="${i}" ${busy||jwBusy()?"disabled":""}>Write another scene</button>
+      ${it.running==="scene"?'<span class="chip run">writing the scene...</span>':""}</div>
+     ${it.error&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
+     ${it.runs.slice().reverse().map(r=>`<div class="box" style="${it.cur===r.n?"border-color:var(--accent)":""}">
+       <div class="hint" style="margin:0 0 6px"><b>Scene ${r.n}</b> · prompt ${r.prompt_id}: ${esc(r.prompt_title)} · ${esc(r.text_model)} (${esc(r.effort)}) · cost <b>${inr(r.cost_inr)}</b> · ${esc(r.created)}</div>
+       ${r.error?`<div class="err">${esc(r.error)}</div>`:""}
+       <div style="margin:4px 0 8px">${jwBriefChips(r.brief)}</div>
+       <pre style="white-space:pre-wrap;font-size:13.5px;margin:0">${esc(r.scene||"")}</pre>
+       <div style="margin-top:8px">${r.scene?(it.cur===r.n?'<span class="chip" style="border-color:var(--accent);color:var(--accent)">used for the image</span>':`<button class="ghost" data-jwuse="${i}:${r.n}" ${jwBusy()?"disabled":""}>Use this scene for the image</button>`):""}</div>
+       <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Everything sent to the text model (prompt + creative brief + scenes to avoid)</summary><pre style="white-space:pre-wrap;font-size:12.5px;max-height:360px;overflow:auto">${esc(r.instructions_sent||"")}</pre></details></div>`).join("")}
+    </div>`}).join("");
+  const anyImg=j.items.some(i=>i.images.length||i.running==="image");
+  $("#jwimgs").classList.toggle("hide",!anyImg);
+  const [w,h]=(j.size||"1088x1360").split("x").map(Number);
+  $("#jwimgs").innerHTML=j.items.map((it,i)=>{
+    if(!(it.images.length||it.running==="image"))return "";
+    return `<div class="r1photo"><div class="r1head"><figure style="width:56px;margin:0"><img src="${esc(it.input_url)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure><b>Photo ${i+1}</b>
+       <button class="ghost" data-jwimgone="${i}" ${it.cur&&!jwBusy()?"":"disabled"}>Make another image from the used scene</button>
+       ${it.running==="image"?'<span class="chip run">making the image...</span>':""}</div>
+      ${it.error&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
+      ${it.running==="image"?`<div class="ph" style="aspect-ratio:${w}/${h};width:200px;margin-top:8px"><div class="spin"></div>Generating...</div>`:""}
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+      ${it.images.slice().reverse().map(r=>`<div style="display:flex;gap:14px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)">
+        <figure style="width:220px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · total <b>${inr(r.scene_cost_inr+r.cost_inr)}</b><br>
+          <span class="hint">Scene (scene ${r.run_n}, prompt ${r.prompt_id}: ${esc(r.prompt_title)}): ${esc(r.text_model)} (${esc(r.effort)}) · <b>${inr(r.scene_cost_inr)}</b><br>Image: ${esc(r.image_model)} · ${esc(r.quality)} · <b>${inr(r.cost_inr)}</b><br>${esc(r.size)} · ${esc(r.created)}</span></figcaption></figure>
+        <div style="flex:1;min-width:260px"><b>Final prompt sent to the image model</b> <span class="hint">· ${r.prompt_c.length.toLocaleString("en-IN")} characters</span>
+          <pre style="white-space:pre-wrap;font-size:13px;max-height:340px;overflow:auto;margin:6px 0 0">${esc(r.prompt_c)}</pre>
+          <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">The scene (written by the text model)</summary><pre style="white-space:pre-wrap;font-size:13px">${esc(r.scene)}</pre></details>
+          <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">The prompt used to write the scene (prompt + creative brief)</summary><pre style="white-space:pre-wrap;font-size:12.5px;max-height:360px;overflow:auto">${esc(r.scene_prompt)}</pre></details></div></div>`).join("")}
+      </div></div>`}).join("");
+}
+async function jwClick(e){
+  const m=e.target.closest("[data-jwmore]"); if(m){await jwScene(m.dataset.jwmore);return}
+  const o=e.target.closest("[data-jwimgone]"); if(o){await jwImage(o.dataset.jwimgone);return}
+  const u=e.target.closest("[data-jwuse]"); if(u&&!jwBusy()){
+    const [i,run]=u.dataset.jwuse.split(":").map(Number);
+    try{await api(`/api/jw/${encodeURIComponent(JW.folder)}/use`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index:i,run})});
+      JW.job=await api("/api/jw/"+encodeURIComponent(JW.folder)); jwRender()}catch(err){$("#jwmsg").textContent=err.message}
+  }
+}
 r1Init();   /* R1 is the first tab now */
 $("#rstOpen").onclick=()=>{$("#rstBox").classList.toggle("hide")};
 $("#rstNo").onclick=()=>{$("#rstBox").classList.add("hide");$("#rstTxt").value="";$("#rstMsg").textContent=""};

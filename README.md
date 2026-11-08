@@ -267,3 +267,9 @@ In R2 and R3 step 2 you can also choose several scenes per photo. Step 3 makes o
 
 ## R4 tab
 R4 is a copy of R2 with its own scene library (`r4_library.json`, shown under "R4 library" in the Scene library tab and as filter "R4" in History). Steps 1 and 2 and multi-select work exactly as in R2. Step 3 has no prompt box: the final prompt is the chosen scene alone, and you choose the image model and quality (flare low/medium or sunburst low/medium). Each image card shows the model, quality, cost and final prompt. Code: `rflow.py` (kind `r4`).
+
+## Jewellery tab
+
+Upload one or many jewellery photos, pick 1 of 15 scene prompts (`jewel_prompts.json`, built by `tools/make_jewel_prompts.py`), pick the text model and effort, and press **Write the scene**. The page shows the prompt, the photos and the model before you run, and the scene, its cost and everything sent to the model afterwards. Step 2 sends the scene + the editable image prompt (`jewel_image_prompt.txt`) + the photo to Flare (low) or Sunburst (low). Every image card shows both models, both costs, the scene prompt, the image prompt and the final prompt.
+
+No scene library. To avoid repeats for the same photo + same prompt, each run gets a "creative brief" (setting, colours, light, camera, presentation, props) chosen as the least-used options from earlier runs of that photo and prompt (random tie-break), plus the opening of the earlier scenes as a "never repeat" list. "Reset app" clears this memory with the history.
