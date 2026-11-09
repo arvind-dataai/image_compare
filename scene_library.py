@@ -203,7 +203,20 @@ def parse_json(text: str) -> dict:
     """Pull the JSON object out of a model reply (tolerates ```json fences and chatter around it)."""
     t = (text or "").strip()
     t = re.sub(r"^```(?:json)?\s*|\s*```$", "", t, flags=re.I)
-    i, j = t.find("{"), t.rfind("}")
-    if i < 0 or j <= i:
+    if "{" not in t:
         raise ValueError("the reply contains no JSON object")
-    return json.loads(t[i: j + 1])
+    dec, err, best = json.JSONDecoder(), None, None
+    for m in re.finditer(r"\{", t):          # first complete JSON object, even if more text or a second object follows
+        try:
+            obj, _ = dec.raw_decode(t[m.start():])
+        except ValueError as e:
+            err = err or e
+            continue
+        if isinstance(obj, dict):
+            if "prompts" in obj or "scenes" in obj or best is None:
+                best = best or obj
+                if "prompts" in obj or "scenes" in obj:
+                    return obj
+    if best is not None:
+        return best
+    raise ValueError(str(err) if err else "the reply contains no JSON object")
