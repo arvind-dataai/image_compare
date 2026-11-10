@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException
 
 import batch
+import imggen
 import jewel
 import main as core
 import r1
@@ -19,7 +20,7 @@ BASE = Path(core.COST_LOG).parent
 def _busy() -> bool:
     if any(j.get("state") == "running" for j in list(webapp.JOBS.values()) + list(webapp.GROUPS.values()) + list(batch.BJOBS.values())):
         return True
-    for jobs in (r1.JOBS, rflow.JOBS, jewel.JOBS):
+    for jobs in (r1.JOBS, rflow.JOBS, jewel.JOBS, imggen.JOBS):
         for job in list(jobs.values()):
             if any(it.get("running") for it in job.get("items", [])):
                 return True
@@ -32,7 +33,7 @@ def reset_all(confirm: str = Form(""), libraries: bool = Form(False)):
         raise HTTPException(400, 'Type RESET to confirm.')
     if _busy():
         raise HTTPException(409, "Something is still running. Wait until it finishes, then reset.")
-    with r1.LOCK, rflow.LOCK, jewel.LOCK:
+    with r1.LOCK, rflow.LOCK, jewel.LOCK, imggen.LOCK:
         for p in core.OUTPUT_DIR.iterdir():
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
@@ -43,6 +44,6 @@ def reset_all(confirm: str = Form(""), libraries: bool = Form(False)):
         if libraries:
             for name in ("scene_library.json", "r2_library.json", "r3_library.json", "r4_library.json"):
                 (BASE / name).unlink(missing_ok=True)
-        for d in (webapp.JOBS, webapp.GROUPS, batch.BJOBS, r1.JOBS, rflow.JOBS, jewel.JOBS):
+        for d in (webapp.JOBS, webapp.GROUPS, batch.BJOBS, r1.JOBS, rflow.JOBS, jewel.JOBS, imggen.JOBS):
             d.clear()
     return {"ok": True, "libraries_deleted": bool(libraries)}

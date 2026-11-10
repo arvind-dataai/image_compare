@@ -477,3 +477,5 @@ from reset import router as reset_router  # noqa: E402  (reset button: wipe all 
 app.include_router(reset_router)
 from jewel import router as jewel_router  # noqa: E402  (Jewellery tab: 15 scene prompts -> scene -> flare / sunburst image)
 app.include_router(jewel_router)
+from imggen import router as imggen_router  # noqa: E402  (Image tab: photos + your prompt -> flare / sunburst image)
+app.include_router(imggen_router)

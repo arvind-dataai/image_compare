@@ -273,3 +273,7 @@ R4 is a copy of R2 with its own scene library (`r4_library.json`, shown under "R
 Upload one or many jewellery photos, pick 1 of 15 scene prompts (`jewel_prompts.json`, built by `tools/make_jewel_prompts.py`), pick the text model and effort, and press **Write the scene**. The page shows the prompt, the photos and the model before you run, and the scene, its cost and everything sent to the model afterwards. Step 2 sends the scene + the editable image prompt (`jewel_image_prompt.txt`) + the photo to Flare (low) or Sunburst (low). Every image card shows both models, both costs, the scene prompt, the image prompt and the final prompt.
 
 No scene library. To avoid repeats for the same photo + same prompt, each run gets a "creative brief" (setting, colours, light, camera, presentation, props) chosen as the least-used options from earlier runs of that photo and prompt (random tie-break), plus the opening of the earlier scenes as a "never repeat" list. "Reset app" clears this memory with the history.
+
+## Image tab
+
+Upload one or many photos, write a prompt, choose Flare (low) or Sunburst (low) and a size. The prompt is sent exactly as written (nothing is added). Photos make one image each, or all go together as references for one image. Each image card shows the image, model, quality, size, cost, tokens and the final prompt. You can change the prompt/model/size and make more images in the same run; everything is kept in History (filter "Image"). Code: `imggen.py`.

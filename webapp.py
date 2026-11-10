@@ -552,6 +552,8 @@ def history():
     rows.extend(rflow.list_rows())
     import jewel
     rows.extend(jewel.list_rows())
+    import imggen
+    rows.extend(imggen.list_rows())
     for b in batch.batch_list()["batches"]:
         rows.append({
             "type": "batch", "flow": b["flow"], "folder": b["folder"], "created": b["created"],

@@ -191,6 +191,7 @@ details.adv[open]>summary{margin-bottom:10px}
   <button data-tab="r1" class="on">R1</button>
   <button data-tab="r2">R2</button>
   <button data-tab="jw">Jewellery</button>
+  <button data-tab="ig">Image</button>
   <button data-tab="r3" hidden>R3</button>
   <button data-tab="r4" hidden>R4</button>
   <button data-tab="brev" hidden>Batch review</button>
@@ -426,6 +427,39 @@ details.adv[open]>summary{margin-bottom:10px}
   <div id="jwimgs" class="hide" style="margin-top:14px"></div>
  </div>
 </section>
+<section id="tab-ig" class="hide">
+ <div class="hero-lite">
+  <span class="t" id="igLabel">New image run</span>
+  <span class="chip hide" id="igCost"></span>
+  <button class="ghost" id="igNew">Start a new run</button>
+ </div>
+ <div class="stepcard s1">
+  <div class="stephead"><span class="num">1</span><div><b>Photo(s) + your prompt: make the image</b><div class="hint" style="margin:0">Your prompt is sent exactly as written, with the photo. Nothing is added to it.</div></div></div>
+  <div class="form">
+   <div>
+    <div id="igUpload">
+     <h2>Photo(s) <span class="hint">(one or many)</span></h2>
+     <label class="drop" id="igdrop"><input type="file" id="igfile" accept="image/png,image/jpeg,image/webp" multiple class="hide">
+       <div>Click or drop photos here (PNG, JPEG, WEBP)</div></label>
+     <div id="igthumbs" class="grid" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px"></div>
+     <div id="igmodebox" class="hide" style="margin-top:8px">
+       <label class="hint" style="display:block"><input type="radio" name="igmode" value="separate" checked> One image for each photo</label>
+       <label class="hint" style="display:block"><input type="radio" name="igmode" value="together"> Send all photos together as references for ONE image</label>
+     </div>
+     <input id="igname" type="text" placeholder="Run name (optional)" style="margin-top:8px;width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+    </div>
+    <div id="igHasRun" class="hint hide"></div>
+    <div class="pair" style="margin-top:12px"><div><div class="sub" style="margin:0 0 3px">Image model</div><select id="igim"></select></div><div><div class="sub" style="margin:0 0 3px">Size</div><select id="igsize"></select></div></div>
+   </div>
+   <div>
+    <h2>Prompt</h2>
+    <textarea id="igp" style="min-height:260px" placeholder="Write the image prompt here"></textarea><div class="cc"><span id="cc_igp">0</span> characters</div>
+   </div>
+  </div>
+  <div class="runrow"><button class="primary" id="iggo" disabled>Make the image</button><span class="est" id="igest"></span><span class="msg" id="igmsg"></span></div>
+  <div id="igout" class="hide" style="margin-top:14px"></div>
+ </div>
+</section>
 <section id="tab-r3" class="hide"></section>
 <section id="tab-r4" class="hide"></section>
 
@@ -478,6 +512,7 @@ details.adv[open]>summary{margin-bottom:10px}
     <label><input type="radio" name="hfilter" value="r3">R3</label>
     <label><input type="radio" name="hfilter" value="r4">R4</label>
     <label><input type="radio" name="hfilter" value="jw">Jewellery</label>
+    <label><input type="radio" name="hfilter" value="ig">Image</label>
     <label><input type="radio" name="hfilter" value="batch">Batch runs</label>
    </div>
    <input id="hsearch" type="text" placeholder="Search prompt, name, category or folder" style="flex:1;min-width:200px">
@@ -507,8 +542,8 @@ async function api(path,opts){
 /* ---------- tabs ---------- */
 $$("nav button").forEach(b=>b.onclick=()=>{
   $$("nav button").forEach(x=>x.classList.toggle("on",x===b));
-  ["new","batch","r1","r2","jw","r3","r4","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
-  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="jw")jwInit(); if(rIsR(b.dataset.tab)&&b.dataset.tab!=="r1")rInit(b.dataset.tab); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
+  ["new","batch","r1","r2","jw","ig","r3","r4","brev","lib","hist"].forEach(t=>$("#tab-"+t).classList.toggle("hide",t!==b.dataset.tab));
+  if(b.dataset.tab==="batch")loadBatches(); if(b.dataset.tab==="r1")r1Init(); if(b.dataset.tab==="jw")jwInit(); if(b.dataset.tab==="ig")igInit(); if(rIsR(b.dataset.tab)&&b.dataset.tab!=="r1")rInit(b.dataset.tab); if(b.dataset.tab==="brev")loadBrev(); if(b.dataset.tab==="lib")loadLib(); if(b.dataset.tab==="hist")loadHist();
 });
 
 /* ---------- lightbox ---------- */
@@ -1614,18 +1649,18 @@ function histShow(){
   $("#htot").textContent=`${rows.length} run${rows.length===1?"":"s"} · total cost ${inr(cost)}`;
   const nsel=HSEL.size; $("#hcmp").classList.toggle("hide",!nsel); $("#hcmp").textContent=`Compare ${nsel} selected run${nsel===1?"":"s"} by image`;
   $("#hlist").innerHTML=rows.length?rows.map(r=>{
-    const kind=r.type==="single"?"Single run":r.type==="jw"?"Jewellery":rIsR(r.type)?r.type.toUpperCase():r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
+    const kind=r.type==="single"?"Single run":r.type==="jw"?"Jewellery":r.type==="ig"?"Image":rIsR(r.type)?r.type.toUpperCase():r.type==="multi"?"Multi-prompt":(r.flow==="scene"?"Batch · Scene flow":"Batch · Direct");
     const st=r.state;
-    const open=r.type==="single"?"single":r.type==="multi"?"multi":(rIsR(r.type)||r.type==="jw")?r.type:"batch";
-    const more=(rIsR(r.type)||r.type==="jw")?((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"")+(r.selected||[]).map(x=>`<div class="hm"><b>${r.type==="jw"?"Last scene":"Selected "+(r.type==="r1"?"prompt":"scene")}${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
+    const open=r.type==="single"?"single":r.type==="multi"?"multi":(rIsR(r.type)||r.type==="jw"||r.type==="ig")?r.type:"batch";
+    const more=(rIsR(r.type)||r.type==="jw"||r.type==="ig")?((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"")+(r.selected||[]).map(x=>`<div class="hm"><b>${r.type==="ig"?"Prompt":r.type==="jw"?"Last scene":"Selected "+(r.type==="r1"?"prompt":"scene")}${r.selected.length>1?" ("+esc(x.photo)+")":""}:</b> <span title="${esc(x.text)}">${esc(x.text.slice(0,260))}${x.text.length>260?"...":""}</span></div>`).join(""):r.type!=="batch"?(r.models&&r.models.length?`<div class="hm">${r.models.map(esc).join(" · ")}</div>`:""):
       ((r.categories||[]).length?`<div class="hm">${r.categories.map(c=>esc(c).replace(/ &gt; /g," > ")).join(", ")}</div>`:"");
     const sel=r.type==="single"?`<label class="hint" style="display:block;margin-top:4px"><input type="checkbox" data-hsel="${esc(r.folder)}" ${HSEL.has(r.folder)?"checked":""}> select to compare</label>`:"";
     return `<div class="card hrow">${r.thumb?`<figure class="hth"><img src="${esc(r.thumb)}" alt="" loading="lazy"></figure>`:`<div class="hth"></div>`}
       <div class="hb"><div><span class="chip">${kind}</span> ${bchip(st)}</div>
        <div class="ht">${esc((r.title||"(no title)").slice(0,160))}${(r.title||"").length>160?"...":""}</div>
-       <div class="hm">${esc(r.created)} · ${r.type==="jw"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.scene_runs} scene${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:(rIsR(r.type)&&r.type!=="r1")?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.id_runs} identification${r.id_runs===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
+       <div class="hm">${esc(r.created)} · ${r.type==="ig"?`<b>${r.photos}</b> job${r.photos===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.type==="jw"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.scene_runs} scene${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.type==="r1"?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.prompt_runs} prompt run${r.prompt_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:(rIsR(r.type)&&r.type!=="r1")?`<b>${r.photos}</b> photo${r.photos===1?"":"s"} · ${r.id_runs} identification${r.id_runs===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.images_done}</b> image${r.images_done===1?"":"s"}`:r.flow==="scene"?`<b>${r.products}</b> product${r.products===1?"":"s"} · ${r.scene_runs} scene run${r.scene_runs===1?"":"s"} · <b>${r.image_runs}</b> image${r.image_runs===1?"":"s"}`:`<b>${r.images_done}</b>/${r.images_total} image${r.images_total===1?"":"s"}`}${r.failed?` · <span class="err">${r.failed} failed</span>`:""} · cost <b>${inr(r.cost_inr||0)}</b> · ${esc(r.folder)}</div>${more}
        ${sel}<div class="links"><button class="ghost" data-hopen="${open}:${esc(r.folder)}">Open</button>${r.flow==="scene"?`<button class="ghost" data-hiter="${esc(r.folder)}">Runs &amp; costs</button>`:""}
-        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||rIsR(r.type)||r.type==="jw")?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
+        ${r.type==="batch"?`<button class="ghost" data-hrev="${esc(r.folder)}">Review these</button>`:(r.type==="multi"||rIsR(r.type)||r.type==="jw"||r.type==="ig")?"":`<a class="ghost" href="/api/runs/${encodeURIComponent(r.folder)}/zip">Download zip</a>`}</div><div class="hiter hide" data-hbox="${esc(r.folder)}"></div></div></div>`;
   }).join(""):'<div class="card hint">No runs found.</div>';
 }
 async function loadHist(){
@@ -1666,6 +1701,7 @@ $("#hlist").addEventListener("click",async e=>{
   const o=e.target.closest("[data-hopen]");
   if(o){const [kind,...rest]=o.dataset.hopen.split(":"), folder=rest.join(":");
     if(kind==="single"){$('nav button[data-tab="new"]').click(); $("#result").classList.remove("hide"); poll(folder); $("#result").scrollIntoView({behavior:"smooth"})}
+    else if(kind==="ig"){$('nav button[data-tab="ig"]').click(); igOpen(folder)}
     else if(kind==="jw"){$('nav button[data-tab="jw"]').click(); jwOpen(folder)}
     else if(kind==="r1"){$('nav button[data-tab="r1"]').click(); r1Open(folder)}
     else if(rIsR(kind)&&kind!=="r1"){$('nav button[data-tab="'+kind+'"]').click(); rOpen(kind,folder)}
@@ -1875,6 +1911,99 @@ async function jwClick(e){
     try{await api(`/api/jw/${encodeURIComponent(JW.folder)}/use`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index:i,run})});
       JW.job=await api("/api/jw/"+encodeURIComponent(JW.folder)); jwRender()}catch(err){$("#jwmsg").textContent=err.message}
   }
+}
+/* ================= Image (photos + your prompt -> image) ================= */
+let IGO=null, IG={folder:"",job:null}, igfiles=[], igtimer=null, igready=false;
+const igBusy=()=>!!(IG.job&&IG.job.items.some(i=>i.running));
+const igcc=()=>{$("#cc_igp").textContent=$("#igp").value.length.toLocaleString("en-IN")};
+async function igInit(){
+  if(igready)return; igready=true;
+  try{IGO=await api("/api/ig/options")}catch(e){$("#igmsg").textContent=e.message;igready=false;return}
+  $("#igim").innerHTML=IGO.image_choices.map(c=>`<option value="${c.id}" ${c.id==="sunburst-low"?"selected":""}>${esc(c.label)}</option>`).join("");
+  $("#igsize").innerHTML=IGO.sizes.map(x=>`<option value="${x.id}" ${x.id==="1088x1360"?"selected":""}>${esc(x.label)}</option>`).join("");
+  ["#igim","#igsize"].forEach(i=>$(i).addEventListener("input",igRefresh));
+  $("#igp").addEventListener("input",()=>{igcc();igRefresh()});
+  $("#igfile").onchange=e=>{igAdd(e.target.files);e.target.value=""};
+  const d=$("#igdrop");
+  ["dragover","dragenter"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add("over")}));
+  ["dragleave","drop"].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove("over")}));
+  d.addEventListener("drop",e=>igAdd(e.dataTransfer.files));
+  $("#igthumbs").addEventListener("click",e=>{const b=e.target.closest("[data-igrm]"); if(b){e.preventDefault();igfiles.splice(+b.dataset.igrm,1);igThumbs();igRefresh()}});
+  $("#iggo").onclick=igGo; $("#igNew").onclick=igReset;
+  $("#igout").addEventListener("click",async e=>{const m=e.target.closest("[data-igmore]"); if(m)igGo(m.dataset.igmore)});
+  igRefresh();
+}
+function igAdd(list){for(const f of Array.from(list||[])){ if(!/^image\//.test(f.type))continue; f._url=URL.createObjectURL(f); igfiles.push(f)} igThumbs(); igRefresh()}
+function igThumbs(){
+  $("#igthumbs").innerHTML=igfiles.map((f,i)=>`<figure style="margin:0;position:relative"><img src="${f._url}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px"><button type="button" class="ghost" data-igrm="${i}" title="Remove" style="position:absolute;top:2px;right:2px;padding:0 6px;font-size:14px;line-height:1.3">&times;</button></figure>`).join("");
+  $("#igmodebox").classList.toggle("hide",igfiles.length<2);
+}
+function igReset(){
+  clearTimeout(igtimer); IG={folder:"",job:null}; igfiles=[]; igThumbs(); $("#igname").value="";
+  $("#igout").classList.add("hide"); $("#igmsg").textContent=""; igRender(); igRefresh();
+}
+function igRefresh(){
+  if(!IGO)return;
+  const has=!!(IG.folder&&IG.job), busy=igBusy();
+  const mode=(document.querySelector('input[name="igmode"]:checked')||{}).value;
+  const n=has?IG.job.items.length:(mode==="together"&&igfiles.length>1?1:igfiles.length);
+  $("#igUpload").classList.toggle("hide",has); $("#igHasRun").classList.toggle("hide",!has);
+  if(has)$("#igHasRun").textContent=`${IG.job.items.length} image job${IG.job.items.length===1?"":"s"} in this run. Change the prompt, model or size and press the button to make more images (each one is kept).`;
+  $("#iggo").disabled=!($("#igp").value.trim()&&n&&!busy); $("#iggo").textContent=has?"Make more images":"Make the image";
+  const c=IGO.image_choices.find(x=>x.id===$("#igim").value)||{est_inr_1024:0};
+  const [w,h]=$("#igsize").value.split("x").map(Number), px=w*h/1048576;
+  $("#igest").innerHTML=n?`${n} image${n===1?"":"s"} · rough estimate <b>≈ ${inr(n*c.est_inr_1024*px)}</b>`:"";
+  if(has){$("#igLabel").textContent=IG.job.name||"Image run"; $("#igCost").textContent="cost so far "+inr(IG.job.total_inr||0); $("#igCost").classList.remove("hide")}
+  else{$("#igLabel").textContent="New image run"; $("#igCost").classList.add("hide")}
+}
+async function igGo(indexes){
+  if(typeof indexes!=="string")indexes="";
+  $("#igmsg").textContent=""; $("#iggo").disabled=true;
+  try{
+    const fd=new FormData(); fd.append("prompt",$("#igp").value); fd.append("size",$("#igsize").value); fd.append("image_choice",$("#igim").value);
+    if(!IG.folder){
+      igfiles.forEach(f=>fd.append("images",f)); fd.append("name",$("#igname").value.trim());
+      fd.append("mode",(document.querySelector('input[name="igmode"]:checked')||{}).value||"separate");
+      const c=await api("/api/ig/run",{method:"POST",body:fd}); IG.folder=c.folder;
+    }else{ fd.append("indexes",indexes); await api(`/api/ig/${encodeURIComponent(IG.folder)}/image`,{method:"POST",body:fd}) }
+    igPoll();
+  }catch(e){$("#igmsg").textContent=e.message; igRefresh()}
+}
+function igPoll(){
+  clearTimeout(igtimer);
+  const tick=async()=>{
+    try{IG.job=await api("/api/ig/"+encodeURIComponent(IG.folder)); igRender(); if(igBusy()){igtimer=setTimeout(tick,2000)}}
+    catch(e){igtimer=setTimeout(tick,4000)}
+  };
+  tick();
+}
+async function igOpen(folder){
+  clearTimeout(igtimer); IG={folder,job:null}; igfiles=[];
+  await igInit();
+  try{IG.job=await api("/api/ig/"+encodeURIComponent(folder))}catch(e){$("#igmsg").textContent=e.message;return}
+  if(IG.job.prompt){$("#igp").value=IG.job.prompt; igcc()}
+  if(IG.job.size)$("#igsize").value=IG.job.size; if(IG.job.choice)$("#igim").value=IG.job.choice;
+  igRender(); if(igBusy())igPoll();
+}
+function igRender(){
+  const j=IG.job; igRefresh();
+  if(!j){$("#igout").classList.add("hide");return}
+  $("#igout").classList.remove("hide");
+  const [w,h]=(j.size||"1088x1360").split("x").map(Number);
+  $("#igout").innerHTML=j.items.map((it,i)=>`<div class="r1photo"><div class="r1head">
+    ${it.input_urls.slice(0,6).map(u=>`<figure style="width:56px;margin:0"><img src="${esc(u)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:6px"></figure>`).join("")}
+    <b>${j.items.length>1||j.mode==="together"?"Job "+(i+1):"Photo"}</b><span class="hint">${esc(it.orig_name)}</span>
+    <button class="ghost" data-igmore="${i}" ${igBusy()?"disabled":""}>Make another with the current prompt/model</button>
+    ${it.running?'<span class="chip run">making the image...</span>':""}</div>
+    ${it.error&&!it.running?`<div class="err">${esc(it.error)}</div>`:""}
+    ${it.running?`<div class="ph" style="aspect-ratio:${w}/${h};width:200px;margin-top:8px"><div class="spin"></div>Generating...</div>`:""}
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+    ${it.images.slice().reverse().map(r=>`<div style="display:flex;gap:14px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--bg)">
+      <figure style="width:240px;margin:0"><img src="${esc(r.url)}" alt=""><figcaption><b>Image #${r.n}</b> · cost <b>${inr(r.cost_inr)}</b><br>
+        <span class="hint">Model: ${esc(r.image_model)} · ${esc(r.quality)}<br>${esc(r.size)} · ${esc(r.created)}${r.usage&&(r.usage.input_tokens||r.usage.output_tokens)?`<br>tokens in ${(r.usage.input_tokens||0).toLocaleString("en-IN")} · out ${(r.usage.output_tokens||0).toLocaleString("en-IN")}`:""}</span></figcaption></figure>
+      <div style="flex:1;min-width:260px"><b>Final prompt sent to the image model</b> <span class="hint">· ${r.prompt.length.toLocaleString("en-IN")} characters</span>
+        <pre style="white-space:pre-wrap;font-size:13px;max-height:340px;overflow:auto;margin:6px 0 0">${esc(r.prompt)}</pre></div></div>`).join("")}
+    </div></div>`).join("");
 }
 r1Init();   /* R1 is the first tab now */
 $("#rstOpen").onclick=()=>{$("#rstBox").classList.toggle("hide")};
